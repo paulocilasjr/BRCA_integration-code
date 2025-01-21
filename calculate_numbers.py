@@ -1,6 +1,65 @@
 import pandas as pd
 from collections import OrderedDict
 
+def get_assays_distribution(df):
+    """
+    Generates the assay distribution for variants by T6 categories (benign and pathogenic).
+
+    Parameters:
+        df (pd.DataFrame): A pandas DataFrame containing BRCA1 variant data, 
+                           including 'T6_category' and 'assay' columns.
+
+    Returns:
+        dict: A dictionary with 'benign_distribution' and 'pathogenic_distribution'.
+    """
+    # Filter for benign and pathogenic categories
+    benign_df = df[df['T6_category'] == 'benign']
+    pathogenic_df = df[df['T6_category'] == 'pathogenic']
+
+    # Count assays for benign and pathogenic categories
+    benign_distribution = benign_df['assay'].value_counts().to_dict()
+    pathogenic_distribution = pathogenic_df['assay'].value_counts().to_dict()
+
+    # Combine into a single dictionary
+    assays_distribution = {
+        "benign_distribution": benign_distribution,
+        "pathogenic_distribution": pathogenic_distribution
+    }
+
+    return assays_distribution
+
+def count_variants_tested_with_t6(df):
+    """
+    Counts the total number of variants that:
+    1. Were tested (>0 non-NaN values in assay columns starting from T8).
+    2. Have a value in column T6.
+
+    Parameters:
+        df (pd.DataFrame): The input DataFrame.
+
+    Returns:
+        int: The total number of variants that meet the criteria.
+    """
+    # Ensure column names are standardized
+    df.columns = df.columns.str.strip()
+
+    # Select assay columns (from T8 onward)
+    assay_columns = df.columns[7:]  # Skip the first 7 metadata columns (T1 to T7)
+    
+    # Check if the variant was tested (any non-NaN value in the assay columns)
+    tested_variants = df[assay_columns].notna().any(axis=1)
+    
+    # Check if T6 has a value
+    has_t6_value = df["T6"].notna()
+    
+    # Combine both conditions
+    variants_with_t6_and_tested = (tested_variants & has_t6_value)
+    
+    # Count the number of variants that satisfy both conditions
+    total_variants_tested_with_t6 = variants_with_t6_and_tested.sum()
+    
+    return total_variants_tested_with_t6
+
 def count_assays_by_t6_categories(df):
     """
     Groups assays (T8 onward) by the number of variants tested for each category 
@@ -398,35 +457,64 @@ BRCA2_criteria, BRCA2_criteria_with_total = count_tracks_by_tested_variants(BRCA
 BRCA1_benign_dist, BRCA1_pathogenic_dist = count_assays_by_t6_categories(BRCA1_df)
 BRCA2_benign_dist, BRCA2_pathogenic_dist = count_assays_by_t6_categories(BRCA2_df)
 
-# Print results
+# Calculate the total variants tested with T6
+BRCA1_variants_tested_with_t6 = count_variants_tested_with_t6(BRCA1_df)
+BRCA2_variants_tested_with_t6 = count_variants_tested_with_t6(BRCA2_df)
+
+# Calculate the total documented tested variants
+BRCA1_documented_tested_variants = count_documented_tested_variants(BRCA1_df)
+BRCA2_documented_tested_variants = count_documented_tested_variants(BRCA2_df)
+
+BRCA1_assays_distribution = get_assays_distribution(BRCA1_df)
+BRCA2_assays_distribution = get_assays_distribution(BRCA2_df)
+
+# Print results for BRCA1
 print("BRCA1 - Total number of assays that tested the variants:", BRCA1_total_assays_tested)
-print("BRCA2 - Total number of assays that tested the variants:", BRCA2_total_assays_tested)
-
 print("BRCA1 - Total documented tested variants:", BRCA1_documented_tested_variants)
-print("BRCA2 - Total documented tested variants:", BRCA2_documented_tested_variants)
-
 print("BRCA1 - Total reference variants tested:", BRCA1_reference_variants_tested)
-print("BRCA2 - Total reference variants tested:", BRCA2_reference_variants_tested)
-
 print("BRCA1 - Total documented variants without T6 and tested:", BRCA1_documented_without_t6_and_tested)
-print("BRCA2 - Total documented variants without T6 and tested:", BRCA2_documented_without_t6_and_tested)
-
 print("BRCA1 - Number of independent tests:", BRCA1_test_distribution)
-print("BRCA2 - Number of independent tests:", BRCA2_test_distribution)
-
 print("BRCA1 - Number of reference variants tests:", BRCA1_reference_test_distribution)
-print("BRCA2 - Number of reference variants tests:", BRCA2_reference_test_distribution)
-
 print("BRCA1 - Number of VUS variants tests:", BRCA1_vus_test_distribution)
+print("BRCA1 - Distribution of assays by the number of variants tested:", BRCA1_assays_distribution)
+print("BRCA1 - Benign distribution of assays by the number of variants tested:", BRCA1_benign_dist)
+print("BRCA1 - Pathogenic distribution of assays by the number of variants tested:", BRCA1_pathogenic_dist)
+print("BRCA1 - Tracks meeting criteria [x benign and x pathogenic]:", BRCA1_criteria)
+print("BRCA1 - Tracks meeting criteria [x benign and x pathogenic] with 10+ total variants:", BRCA1_criteria_with_total)
+print("BRCA1 - Assay Counts by Threshold:", BRCA1_threshold_counts)
+
+# Print results for BRCA2
+print("BRCA2 - Total number of assays that tested the variants:", BRCA2_total_assays_tested)
+print("BRCA2 - Total documented tested variants:", BRCA2_documented_tested_variants)
+print("BRCA2 - Total reference variants tested:", BRCA2_reference_variants_tested)
+print("BRCA2 - Total documented variants without T6 and tested:", BRCA2_documented_without_t6_and_tested)
+print("BRCA2 - Number of independent tests:", BRCA2_test_distribution)
+print("BRCA2 - Number of reference variants tests:", BRCA2_reference_test_distribution)
 print("BRCA2 - Number of VUS variants tests:", BRCA2_vus_test_distribution)
+print("BRCA2 - Distribution of assays by the number of variants tested:", BRCA2_assays_distribution)
+print("BRCA2 - Benign distribution of assays by the number of variants tested:", BRCA2_benign_dist)
+print("BRCA2 - Pathogenic distribution of assays by the number of variants tested:", BRCA2_pathogenic_dist)
+print("BRCA2 - Tracks meeting criteria [x benign and x pathogenic]:", BRCA2_criteria)
+print("BRCA2 - Tracks meeting criteria [x benign and x pathogenic] with 10+ total variants:", BRCA2_criteria_with_total)
+print("BRCA2 - Assay Counts by Threshold:", BRCA2_threshold_counts)
 
-##Next: Number of variants tested grouped by track (Count by column now)
-print("brca1 - tracks meeting criteria:", BRCA1_criteria)
-print("brca1 - tracks meeting criteria with 10+ total variants:", BRCA1_criteria_with_total)
+# Create an Excel writer
+with pd.ExcelWriter("BRCA_Results_2025_V4.xlsx", engine="xlsxwriter") as writer:
+    # Function to write structured data to an Excel sheet
+    def write_to_excel(data, sheet_name):
+        rows = []
+        for title, value in data.items():
+            if isinstance(value, dict):
+                for k, v in value.items():
+                    rows.append([title, k, v])
+            else:
+                rows.append([title, None, value])
 
-print("brca2 - tracks meeting criteria:", BRCA2_criteria)
-print("BRCA2 - Tracks meeting criteria with 10+ total variants:", BRCA2_criteria_with_total)
+        # Create DataFrame from rows
+        df = pd.DataFrame(rows, columns=["Metric", "Key", "Value"])
+        # Write DataFrame to the Excel sheet
+        df.to_excel(writer, sheet_name=sheet_name, index=False, startrow=0)
 
-print("brca1 - assay counts by threshold:", brca1_threshold_counts)
-print("brca2 - assay counts by threshold:", brca2_threshold_counts)
-
+    # Write BRCA1 and BRCA2 data
+    write_to_excel(brca1_data, "BRCA1")
+    write_to_excel(brca2_data, "BRCA2")
