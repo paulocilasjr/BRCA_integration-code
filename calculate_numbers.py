@@ -1,4 +1,152 @@
 import pandas as pd
+from collections import OrderedDict
+
+def count_assays_by_t6_categories(df):
+    """
+    Groups assays (T8 onward) by the number of variants tested for each category 
+    (benign, pathogenic), based on T6 values.
+
+    Parameters:
+        df (pd.DataFrame): The input DataFrame.
+
+    Returns:
+        dict: Two ordered dictionaries:
+            - Benign distribution (T6 = 1 or 2)
+            - Pathogenic distribution (T6 = 4 or 5)
+    """
+    # Select assay columns (from T8 onward)
+    assay_columns = df.columns[7:]  # Skip the first 7 metadata columns (T1 to T7)
+
+    # Split the dataframe into categories based on T6 values
+    benign_variants = df[df["T6"].isin([1, 2])]
+    pathogenic_variants = df[df["T6"].isin([4, 5])]
+
+    # Helper function to calculate the distribution for a given category
+    def calculate_distribution(category_df):
+        # Count the number of non-NaN values for each assay column
+        assay_test_counts = category_df[assay_columns].notna().sum(axis=0)
+        # Count the frequency of each unique number of variants tested
+        distribution = assay_test_counts.value_counts().to_dict()
+        # Order the dictionary by the number of variants tested (keys)
+        return OrderedDict(sorted(distribution.items()))
+
+    # Calculate distributions for each category
+    benign_distribution = calculate_distribution(benign_variants)
+    pathogenic_distribution = calculate_distribution(pathogenic_variants)
+
+    return benign_distribution, pathogenic_distribution
+
+def count_tracks_by_tested_variants(df):
+    """
+    Counts the number of assay tracks based on the following criteria:
+    1) Tracks that have tested a specific number of benign and pathogenic variants (1-5).
+    2) Tracks that meet the above criteria and have tested 10 or more variants in total.
+
+    Parameters:
+        df (pd.DataFrame): The input DataFrame.
+
+    Returns:
+        dict: Two dictionaries:
+            - Tracks meeting criteria for 1 benign and 1 pathogenic variants, up to 5 each.
+            - Tracks meeting the same criteria with at least 10 total variants tested.
+    """
+    # Select assay columns (from T8 onward)
+    assay_columns = df.columns[7:]  # Skip the first 7 metadata columns (T1 to T7)
+
+    # Split the dataframe into benign and pathogenic variants based on T6 values
+    benign_variants = df[df["T6"].isin([1, 2])]  # T6 = 1 or 2 for benign
+    pathogenic_variants = df[df["T6"].isin([4, 5])]  # T6 = 4 or 5 for pathogenic
+
+    # Initialize dictionaries to store the results
+    criteria_dict = {}
+    criteria_with_total_dict = {}
+
+    for threshold in range(1, 11):  # Thresholds for 1 to 5 benign/pathogenic variants
+        # Filter tracks that meet the benign and pathogenic thresholds
+        tracks_meeting_criteria = (benign_variants[assay_columns].notna().sum(axis=0) >= threshold) & \
+                                  (pathogenic_variants[assay_columns].notna().sum(axis=0) >= threshold)
+        count_meeting_criteria = tracks_meeting_criteria.sum()
+
+        # Filter tracks meeting the additional total variants threshold (10 or more)
+        total_variants_tested = df[assay_columns].notna().sum(axis=0)
+        tracks_meeting_criteria_with_total = tracks_meeting_criteria & (total_variants_tested >= 10)
+        count_meeting_criteria_with_total = tracks_meeting_criteria_with_total.sum()
+
+        # Store results in the dictionaries
+        criteria_dict[threshold] = count_meeting_criteria
+        criteria_with_total_dict[threshold] = count_meeting_criteria_with_total
+
+    return criteria_dict, criteria_with_total_dict
+
+def count_assays_by_sensitivity_specificity(df):
+    """
+    Counts the number of assays that meet specific sensitivity and specificity thresholds.
+
+    Parameters:
+        df (pd.DataFrame): The input DataFrame. T6 is the reference column, and T8 onward are assay columns.
+
+    Returns:
+        dict: A dictionary with sensitivity and specificity thresholds as keys and counts of assays meeting those criteria as values.
+    """
+    # Define thresholds for sensitivity and specificity
+    thresholds = [0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+    result = {f"sensitivity_and_specificity_>={threshold}": 0 for threshold in thresholds}
+
+    # Select assay columns (from T8 onward)
+    assay_columns = df.columns[7:]  # Skip the first 7 metadata columns (T1 to T7)
+
+    # Define mapping for T6 reference values
+    benign_reference = [1, 2]  # T6 values that map to benign (0)
+    pathogenic_reference = [4, 5]  # T6 values that map to pathogenic (2)
+
+    # Iterate through each assay column
+    for col in assay_columns:
+        # Initialize counters for this assay
+        tp_benign = tp_pathogenic = 0
+        total_benign = total_pathogenic = 0
+        tn_benign = tn_pathogenic = 0
+        fp_benign = fn_benign = 0
+        fp_pathogenic = fn_pathogenic = 0
+
+        # Evaluate sensitivity and specificity for each assay
+        for _, row in df.iterrows():
+            reference = row['T6']
+            assay_result = row[col]
+
+            # Skip if assay result is NaN
+            if pd.isna(assay_result):
+                continue
+
+            # Evaluate sensitivity and specificity
+            if reference in benign_reference:
+                total_benign += 1
+                if assay_result == 0:  # True Positive for benign
+                    tp_benign += 1
+                elif assay_result == 2:  # False Positive for benign
+                    fp_benign += 1
+            elif reference in pathogenic_reference:
+                total_pathogenic += 1
+                if assay_result == 2:  # True Positive for pathogenic
+                    tp_pathogenic += 1
+                elif assay_result == 0:  # False Positive for pathogenic
+                    fp_pathogenic += 1
+
+        # Calculate sensitivity and specificity for this assay
+        sensitivity_benign = tp_benign / total_benign if total_benign > 0 else 0
+        sensitivity_pathogenic = tp_pathogenic / total_pathogenic if total_pathogenic > 0 else 0
+        specificity_benign = 1 - (fp_benign / total_benign) if total_benign > 0 else 0
+        specificity_pathogenic = 1 - (fp_pathogenic / total_pathogenic) if total_pathogenic > 0 else 0
+
+        # Aggregate sensitivity and specificity
+        overall_sensitivity = min(sensitivity_benign, sensitivity_pathogenic)
+        overall_specificity = min(specificity_benign, specificity_pathogenic)
+
+        # Check if this assay meets each threshold
+        for threshold in thresholds:
+            if overall_sensitivity >= threshold and overall_specificity >= threshold:
+                result[f"sensitivity_and_specificity_>={threshold}"] += 1
+
+    return result
 
 def number_of_vus_variants_tests(df):
     """
@@ -86,13 +234,13 @@ def sum_assays_tested(df):
     """
     # Select assay columns (from T8 onward)
     assay_columns = df.columns[7:]  # Skip the first 7 metadata columns (T1 to T7)
-    
+
     # Count the number of non-NaN values for each row in the assay columns
     row_counts = df[assay_columns].notna().sum(axis=1)
-    
+
     # Sum the counts across all rows
     total_assays_tested = row_counts.sum()
-    
+
     return total_assays_tested
 
 def count_documented_tested_variants(df):
@@ -112,16 +260,16 @@ def count_documented_tested_variants(df):
 
     # Select assay columns (from T8 onward)
     assay_columns = df.columns[7:]  # Skip the first 7 metadata columns (T1 to T7)
-    
+
     # Filter rows where T7 == 1 (documented variants)
     documented_variants = df[df["T7"] == 1]
-    
+
     # Check if any assay result (T8 onward) is non-NaN for documented variants
     tested_variants = documented_variants[assay_columns].notna().any(axis=1)
-    
+
     # Count the number of documented and tested variants
     total_documented_tested_variants = tested_variants.sum()
-    
+
     return total_documented_tested_variants
 
 def count_reference_variants_tested(df):
@@ -141,19 +289,19 @@ def count_reference_variants_tested(df):
 
     # Select assay columns (from T8 onward)
     assay_columns = df.columns[7:]  # Skip the first 7 metadata columns (T1 to T7)
-    
+
     # Check if the variant was tested (any non-NaN value in the assay columns)
     tested_variants = df[assay_columns].notna().any(axis=1)
-    
+
     # Check if T6 has a value
     has_t6_value = df["T6"].notna()
-    
+
     # Combine both conditions
     variants_with_t6_and_tested = (tested_variants & has_t6_value)
-    
+
     # Count the number of variants that satisfy both conditions
     total_variants_tested_with_t6 = variants_with_t6_and_tested.sum()
-    
+
     return total_variants_tested_with_t6
 
 def count_documented_without_t6_and_tested(df):
@@ -174,42 +322,42 @@ def count_documented_without_t6_and_tested(df):
 
     # Select assay columns (from T8 onward)
     assay_columns = df.columns[7:]  # Skip the first 7 metadata columns (T1 to T7)
-    
+
     # Filter rows where T7 == 1 (documented variants)
     documented_variants = df[df["T7"] == 1]
-    
+
     # Check if T6 is NaN
     without_t6 = documented_variants["T6"].isna()
-    
+
     # Check if any assay result (T8 onward) is non-NaN for documented variants
     tested_variants = documented_variants[assay_columns].notna().any(axis=1)
-    
+
     # Combine both conditions
     documented_without_t6_and_tested = (without_t6 & tested_variants)
-    
+
     # Count the number of variants that satisfy both conditions
     total_documented_without_t6_and_tested = documented_without_t6_and_tested.sum()
-    
+
     return total_documented_without_t6_and_tested
 
 # File path
-file_path = "./../SUPP_TABLES_BRCA12_JAN_2025_V14.xlsx"
+file_path = "SUPP_TABLES_BRCA12_JAN_2025_V15.xlsx"
 
 # Load "Sup Table 1" and set the second row as column headers
 sheet_name = "Sup Table 1"
 BRCA1_df = pd.read_excel(
-    file_path, 
-    sheet_name=sheet_name, 
-    engine="openpyxl", 
+    file_path,
+    sheet_name=sheet_name,
+    engine="openpyxl",
     skiprows=1  # Skip the first row (metadata)
 )
 
 # Load "Sup Table 2" and set the second row as column headers
 sheet_name = "Sup Table 2"
 BRCA2_df = pd.read_excel(
-    file_path, 
-    sheet_name=sheet_name, 
-    engine="openpyxl", 
+    file_path,
+    sheet_name=sheet_name,
+    engine="openpyxl",
     skiprows=1  # Skip the first row (metadata)
 )
 
@@ -241,6 +389,15 @@ BRCA2_reference_test_distribution = number_of_reference_variants_tests(BRCA2_df)
 BRCA1_vus_test_distribution = number_of_vus_variants_tests(BRCA1_df)
 BRCA2_vus_test_distribution = number_of_vus_variants_tests(BRCA2_df)
 
+BRCA1_threshold_counts = count_assays_by_sensitivity_specificity(BRCA1_df)
+BRCA2_threshold_counts = count_assays_by_sensitivity_specificity(BRCA2_df)
+
+BRCA1_criteria, BRCA1_criteria_with_total = count_tracks_by_tested_variants(BRCA1_df)
+BRCA2_criteria, BRCA2_criteria_with_total = count_tracks_by_tested_variants(BRCA2_df)
+
+BRCA1_benign_dist, BRCA1_pathogenic_dist = count_assays_by_t6_categories(BRCA1_df)
+BRCA2_benign_dist, BRCA2_pathogenic_dist = count_assays_by_t6_categories(BRCA2_df)
+
 # Print results
 print("BRCA1 - Total number of assays that tested the variants:", BRCA1_total_assays_tested)
 print("BRCA2 - Total number of assays that tested the variants:", BRCA2_total_assays_tested)
@@ -263,4 +420,13 @@ print("BRCA2 - Number of reference variants tests:", BRCA2_reference_test_distri
 print("BRCA1 - Number of VUS variants tests:", BRCA1_vus_test_distribution)
 print("BRCA2 - Number of VUS variants tests:", BRCA2_vus_test_distribution)
 
-#Next: Number of variants tested grouped by track (Count by column now)
+##Next: Number of variants tested grouped by track (Count by column now)
+print("brca1 - tracks meeting criteria:", BRCA1_criteria)
+print("brca1 - tracks meeting criteria with 10+ total variants:", BRCA1_criteria_with_total)
+
+print("brca2 - tracks meeting criteria:", BRCA2_criteria)
+print("BRCA2 - Tracks meeting criteria with 10+ total variants:", BRCA2_criteria_with_total)
+
+print("brca1 - assay counts by threshold:", brca1_threshold_counts)
+print("brca2 - assay counts by threshold:", brca2_threshold_counts)
+
