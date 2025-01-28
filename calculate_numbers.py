@@ -1,32 +1,35 @@
-import pandas as pd
+import pandas as pd 
 from collections import OrderedDict
 
 def get_assays_distribution(df):
     """
-    Generates the assay distribution for variants by T6 categories (benign and pathogenic).
-
+    Generates the distribution of the number of variants tested per column starting from T8.
+    
     Parameters:
-        df (pd.DataFrame): A pandas DataFrame containing BRCA1 variant data, 
-                           including 'T6_category' and 'assay' columns.
-
+        df (pd.DataFrame): A pandas DataFrame containing assay data from columns T8 onwards.
+        
     Returns:
-        dict: A dictionary with 'benign_distribution' and 'pathogenic_distribution'.
+        dict: A dictionary where the keys are the number of variants tested in each column
+              and the values are how many columns had exactly that number of variants tested.
     """
-    # Filter for benign and pathogenic categories
-    benign_df = df[df['T6_category'] == 'benign']
-    pathogenic_df = df[df['T6_category'] == 'pathogenic']
+    # Initialize a dictionary to track how many columns had each count of variants tested
+    variants_count_distribution = {}
+    
+    # Iterate over the columns starting from T8 (index 7 and onward)
+    for column in df.columns[7:]:  # assuming T8 starts at index 7
+        # Count the number of non-null variants tested in the column
+        variants_tested = df[column].notnull().sum()
+        
+        # Update the distribution dictionary
+        if variants_tested in variants_count_distribution:
+            variants_count_distribution[variants_tested] += 1
+        else:
+            variants_count_distribution[variants_tested] = 1
 
-    # Count assays for benign and pathogenic categories
-    benign_distribution = benign_df['assay'].value_counts().to_dict()
-    pathogenic_distribution = pathogenic_df['assay'].value_counts().to_dict()
+    # Sort the dictionary by keys (number of variants tested)
+    sorted_distribution = dict(sorted(variants_count_distribution.items()))
 
-    # Combine into a single dictionary
-    assays_distribution = {
-        "benign_distribution": benign_distribution,
-        "pathogenic_distribution": pathogenic_distribution
-    }
-
-    return assays_distribution
+    return sorted_distribution
 
 def count_variants_tested_with_t6(df):
     """
@@ -45,19 +48,19 @@ def count_variants_tested_with_t6(df):
 
     # Select assay columns (from T8 onward)
     assay_columns = df.columns[7:]  # Skip the first 7 metadata columns (T1 to T7)
-    
+
     # Check if the variant was tested (any non-NaN value in the assay columns)
     tested_variants = df[assay_columns].notna().any(axis=1)
-    
+
     # Check if T6 has a value
     has_t6_value = df["T6"].notna()
-    
+
     # Combine both conditions
     variants_with_t6_and_tested = (tested_variants & has_t6_value)
-    
+
     # Count the number of variants that satisfy both conditions
     total_variants_tested_with_t6 = variants_with_t6_and_tested.sum()
-    
+
     return total_variants_tested_with_t6
 
 def count_assays_by_t6_categories(df):
@@ -400,7 +403,7 @@ def count_documented_without_t6_and_tested(df):
     return total_documented_without_t6_and_tested
 
 # File path
-file_path = "SUPP_TABLES_BRCA12_JAN_2025_V15.xlsx"
+file_path = "./dataset/SUPP_TABLES_BRCA12_JAN_2025_V4.xlsx"
 
 # Load "Sup Table 1" and set the second row as column headers
 sheet_name = "Sup Table 1"
@@ -498,8 +501,42 @@ print("BRCA2 - Tracks meeting criteria [x benign and x pathogenic]:", BRCA2_crit
 print("BRCA2 - Tracks meeting criteria [x benign and x pathogenic] with 10+ total variants:", BRCA2_criteria_with_total)
 print("BRCA2 - Assay Counts by Threshold:", BRCA2_threshold_counts)
 
+# Define brca1_data
+brca1_data = {
+    "Total Assays Tested": BRCA1_total_assays_tested,
+    "Total Documented Tested Variants": BRCA1_documented_tested_variants,
+    "Total Reference Variants Tested": BRCA1_reference_variants_tested,
+    "Total Documented Variants VUS and tested": BRCA1_documented_without_t6_and_tested,
+    "Number of Independent Tests": BRCA1_test_distribution,
+    "Reference Variants Tests": BRCA1_reference_test_distribution,
+    "VUS Variants Tests": BRCA1_vus_test_distribution,
+    "Assays Distribution": BRCA1_assays_distribution,
+    "Benign Assay Distribution": BRCA1_benign_dist,
+    "Pathogenic Assay Distribution": BRCA1_pathogenic_dist,
+    "Criteria (Benign and Pathogenic)": BRCA1_criteria,
+    "Criteria with 10+ Total Variants": BRCA1_criteria_with_total,
+    "Assay Counts by Threshold": BRCA1_threshold_counts,
+}
+
+# Define brca2_data
+brca2_data = {
+    "Total Assays Tested": BRCA2_total_assays_tested,
+    "Total Documented Tested Variants": BRCA2_documented_tested_variants,
+    "Total Reference Variants Tested": BRCA2_reference_variants_tested,
+    "Total Documented Variants VUS and tested": BRCA2_documented_without_t6_and_tested,
+    "Number of independent Tests": BRCA2_test_distribution,
+    "Reference Variants Tests": BRCA2_reference_test_distribution,
+    "VUS Variants Tests": BRCA2_vus_test_distribution,
+    "Assays Distribution": BRCA2_assays_distribution,
+    "Benign Assay Distribution": BRCA2_benign_dist,
+    "Pathogenic Assay Distribution": BRCA2_pathogenic_dist,
+    "Criteria (Benign and Pathogenic)": BRCA2_criteria,
+    "Criteria with 10+ Total Variants": BRCA2_criteria_with_total,
+    "Assay Counts by Threshold": BRCA2_threshold_counts,
+}
+
 # Create an Excel writer
-with pd.ExcelWriter("BRCA_Results_2025_V4.xlsx", engine="xlsxwriter") as writer:
+with pd.ExcelWriter("./results/BRCA_Results_2025_V5.xlsx", engine="xlsxwriter") as writer:
     # Function to write structured data to an Excel sheet
     def write_to_excel(data, sheet_name):
         rows = []

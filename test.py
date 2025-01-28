@@ -239,8 +239,8 @@ def GetResults(df, df2,name):
 file_path = "SUPP_TABLES_BRCA12_JAN_2025_V15.xlsx"
 sheet_name_BRCA1_table = "Sup Table 1"
 sheet_name_BRCA2_table = "Sup Table 2"
-sheet_name_BRCA1_class = "Sup Table 14"
-sheet_name_BRCA2_class = "Sup Table 15"
+sheet_name_BRCA1_class = "Sup Table 10"
+sheet_name_BRCA2_class = "Sup Table 11"
 
 brca1_df = pd.read_excel(file_path, sheet_name=sheet_name_BRCA1_table, engine="openpyxl", header=1)
 brca2_df = pd.read_excel(file_path, sheet_name=sheet_name_BRCA2_table, engine="openpyxl", header=1)

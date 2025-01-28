@@ -28,7 +28,7 @@ def count_categories(arrays):
         bs3_present = any('BS3' in item for item in array)
         ps3_present = any('PS3' in item for item in array)
         hypomorph_present = 'hypomorph' in array
-        
+
         if hypomorph_present:
             categories['hypomorph'] += 1
 
@@ -65,7 +65,6 @@ def count_categories(arrays):
         else:
             categories['not_classified'] += 1
 
-            
     print (interation)
     return categories
 
@@ -73,7 +72,7 @@ def is_valid_ratio(var1, var2, class1, class2):
     # Check if both variables are nonzero
     if var1 == 0 or var2 == 0:
         return f'{var1}:{var2}:Indeterminate'
-    
+
     # Calculate the ratio
     actual_ratio1 = var1 / var2
     actual_ratio2 = var2 / var1
@@ -101,7 +100,7 @@ def check_discordance(array):
                 ps3_count += 1
             if 'hypomorph' in item:
                 hypomorph_count += 1
-    
+
     array = [item for item in array if not (isinstance(item, float) and math.isnan(item))]
     # Check for the presence of 'BS3', 'PS3', and 'Indeterminate'
     bs3_present = any('BS3' in item for item in array)
@@ -116,20 +115,20 @@ def check_discordance(array):
     elif (bs3_present and hypomorph_present):
         ratio_validation = is_valid_ratio(bs3_count, hypomorph_count, "Benign", "Hypomorph")
         return f'Hypomorph:Discordant:{ratio_validation}'
-    
+
     elif (ps3_present and hypomorph_present):
         ratio_validation = is_valid_ratio(ps3_count, hypomorph_count, "Pathogenic", "Hypomorph")
         return f'Hypomorph:Discordant:{ratio_validation}'
-    
+
     elif bs3_present:
         return f'Benign:Concordant:{bs3_count}:-:-'
-    
+
     elif ps3_present:
         return f'Pathogenic:Concordant:{ps3_count}:-:-'
-    
+
     elif hypomorph_present:
         return f'Hypomorph:Concordant:{hypomorph_count}:-:-'
-    
+
     else:
         return 'indeterminate:indeterminate:-:-:-'
 
@@ -147,7 +146,7 @@ def BuildDict(tab_data):
         if key_A not in dict_1:
             # If it doesn't exist, create a new dictionary for the key
             dict_1[key_A] = {}
-        
+
         # Assign values to the inner dictionary
         dict_1[key_A]["0"] = value_C
         dict_1[key_A]["2"] = value_B
@@ -159,7 +158,6 @@ def GetResults(df, df2,name):
     out_put_dict = {}
 
     for column in df.columns:
-        column_name = column
         for index, value in df[column].items():
             if pd.notna(value):
                 try:
@@ -171,32 +169,64 @@ def GetResults(df, df2,name):
                     # Append class_target to out_put_dict
                     if index not in out_put_dict:
                         out_put_dict[index] = []
-                    out_put_dict[index].append(class_target)
+                    out_put_dict[index].append(class_target +f"({column})")
                 except:
                     pass
 
     # Write out_put_dict to a file
     arrays = []
-    with open(f'output_v11_{name}.txt', 'w') as file:
+    with open(f'output_v12_{name}.txt', 'w') as file:
+        print(out_put_dict) 
+        print(type(out_put_dict))
         for key, value in out_put_dict.items():
             discordance_result = check_discordance(value)
             arrays.append(value)
             file.write(f"{key}:{discordance_result}:{value}\n")
             #file.write(f"Row {key}: {value}\n")
 
+    result = count_categories(arrays)
+    print("Total count:", result)
 
+def GetResultsClean(df, df2,name):
+    class_braca1_all_spli = BuildDict(df2)
+    # You can continue building dictionaries for other columns in a similar manner
+    out_put_dict = {}
+
+    for column in df.columns:
+        for index, value in df[column].items():
+            if pd.notna(value):
+                try:
+                    value = str(int(value))
+                    if value != "1":
+                        class_target = class_braca1_all_spli[column][value]
+                        if class_target != "Indeterminate":
+                            if index not in out_put_dict:
+                                out_put_dict[index] = []
+                            out_put_dict[index].append(class_target +f"({column})")
+                except:
+                    pass
+
+    # Write out_put_dict to a file
+    arrays = []
+    with open(f'output_Clean_v12_{name}.txt', 'w') as file:
+        # Sort the dictionary by extracting the first number from the value
+        for key, value in out_put_dict.items():
+            discordance_result = check_discordance(value)
+            arrays.append(value)
+            file.write(f"{key}:{discordance_result}:{value}\n")
+            #file.write(f"Row {key}: {value}\n")
 
     result = count_categories(arrays)
     print("Total count:", result)
 
-file_path = "SUPP_TABLES_BRCA12_JAN_2025_V15.xlsx"
+file_path = "./dataset/SUPP_TABLES_BRCA12_JAN_2025_V4.xlsx"
 sheet_name_BRCA1_table = "Sup Table 1"
 sheet_name_BRCA2_table = "Sup Table 2"
-sheet_name_BRCA1_class = "Sup Table 14"
-sheet_name_BRCA2_class = "Sup Table 15"
+sheet_name_BRCA1_class = "Sup Table 10"
+sheet_name_BRCA2_class = "Sup Table 11"
 
-brca1_df = pd.read_excel(file_path, sheet_name=sheet_name_BRCA1_table, engine="openpyxl", header=1)
-brca2_df = pd.read_excel(file_path, sheet_name=sheet_name_BRCA2_table, engine="openpyxl", header=1)
+brca1_df_full = pd.read_excel(file_path, sheet_name=sheet_name_BRCA1_table, engine="openpyxl", header=1)
+brca2_df_full = pd.read_excel(file_path, sheet_name=sheet_name_BRCA2_table, engine="openpyxl", header=1)
 brca1_class = pd.read_excel(file_path, sheet_name=sheet_name_BRCA1_class, engine="openpyxl", header=2)
 brca2_class = pd.read_excel(file_path, sheet_name=sheet_name_BRCA2_class, engine="openpyxl", header=2)
 
@@ -209,10 +239,13 @@ def CleanDf(df, type=None):
         df_class = df.iloc[:, [0, -2, -1]]
         return df_class
 
-brca1_df = CleanDf(brca1_df, "table")
-brca2_df = CleanDf(brca2_df, "table")
+brca1_df = CleanDf(brca1_df_full, "table")
+brca2_df = CleanDf(brca2_df_full, "table")
 brca1_class = CleanDf(brca1_class)
 brca2_class = CleanDf(brca2_class)
 
 GetResults(brca1_df, brca1_class, "BRCA1")
 GetResults(brca2_df, brca2_class, "BRCA2")
+GetResultsClean(brca1_df, brca1_class, "BRCA1")
+GetResultsClean(brca2_df, brca2_class, "BRCA2")
+
