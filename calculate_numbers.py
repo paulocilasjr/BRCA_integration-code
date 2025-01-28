@@ -403,7 +403,7 @@ def count_documented_without_t6_and_tested(df):
     return total_documented_without_t6_and_tested
 
 # File path
-file_path = "./dataset/SUPP_TABLES_BRCA12_JAN_2025_V4.xlsx"
+file_path = "./dataset/SUPP_TABLES_BRCA12_JAN_2025_V6.xlsx"
 
 # Load "Sup Table 1" and set the second row as column headers
 sheet_name = "Sup Table 1"
@@ -536,7 +536,7 @@ brca2_data = {
 }
 
 # Create an Excel writer
-with pd.ExcelWriter("./results/BRCA_Results_2025_V5.xlsx", engine="xlsxwriter") as writer:
+with pd.ExcelWriter("./results/BRCA_Results_2025_V6.xlsx", engine="xlsxwriter") as writer:
     # Function to write structured data to an Excel sheet
     def write_to_excel(data, sheet_name):
         rows = []
