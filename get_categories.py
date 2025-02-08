@@ -217,7 +217,7 @@ def merge_with_metadata(out_put_dict, metadata):
         results.append((key, value, *discordance_result))
 
     # Convert to DataFrame
-    out_put_df = pd.DataFrame(results, columns=["index", "All_classes", "Classification", "Status", "Count Pathogenic class", "Count Benign class", "Prepon. Class", "Strongest Classification"])
+    out_put_df = pd.DataFrame(results, columns=["index", "All_classes", "Classification", "Status", "Count class 1", "Count class 2", "Prepon. Class", "Strongest Classification"])
     out_put_df.set_index("index", inplace=True)
 
     # Perform a left merge with the metadata
