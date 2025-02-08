@@ -65,7 +65,7 @@ def count_categories(arrays):
         else:
             categories['not_classified'] += 1
 
-            
+
     print (interation)
     return categories
 
@@ -73,7 +73,7 @@ def is_valid_ratio(var1, var2, class1, class2):
     # Check if both variables are nonzero
     if var1 == 0 or var2 == 0:
         return f'{var1}:{var2}:Indeterminate'
-    
+
     # Calculate the ratio
     actual_ratio1 = var1 / var2
     actual_ratio2 = var2 / var1
@@ -101,7 +101,7 @@ def check_discordance(array):
                 ps3_count += 1
             if 'hypomorph' in item:
                 hypomorph_count += 1
-    
+
     array = [item for item in array if not (isinstance(item, float) and math.isnan(item))]
     # Check for the presence of 'BS3', 'PS3', and 'Indeterminate'
     bs3_present = any('BS3' in item for item in array)

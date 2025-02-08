@@ -1,6 +1,53 @@
 import pandas as pd
 from time import sleep
 import math
+import re
+
+# Define classification strength hierarchy
+CLASSIFICATION_HIERARCHY = {
+    "BS3": 5, "BS3_moderate": 4, "BS3_supporting": 3,
+    "PS3": 5, "PS3_moderate": 4, "PS3_supporting": 3,
+    "Hypomorph": 2,
+    "Indeterminate": 1
+}
+PS3_HIERARCHY = {
+    "PS3": 5, "PS3_moderate": 4, "PS3_supporting": 3,
+    "Hypomorph": 2,
+    "Indeterminate": 1
+}
+BS3_HIERARCHY = {
+    "BS3": 5, "BS3_moderate": 4, "BS3_supporting": 3,
+    "Hypomorph": 2,
+    "Indeterminate": 1
+}
+def get_strongest_classification(array, categorie=None):
+    """Returns the strongest classification found in the cleaned array."""
+    strongest = "Indeterminate"
+    max_strength = 1  # Default to the lowest strength
+
+    if categorie == "BS3":
+        for item in array:
+            if item in BS3_HIERARCHY:
+                strength = BS3_HIERARCHY[item]
+                if strength > max_strength:
+                    max_strength = strength
+                    strongest = item
+    elif categorie == "PS3":
+        for item in array:
+            if item in PS3_HIERARCHY:
+                strength = PS3_HIERARCHY[item]
+                if strength > max_strength:
+                    max_strength = strength
+                    strongest = item
+    else:
+        for item in array:
+            if item in CLASSIFICATION_HIERARCHY:
+                strength = CLASSIFICATION_HIERARCHY[item]
+                if strength > max_strength:
+                    max_strength = strength
+                    strongest = item
+
+    return strongest
 
 def count_categories(arrays):
     categories = {
@@ -69,21 +116,18 @@ def count_categories(arrays):
     return categories
 
 def is_valid_ratio(var1, var2, class1, class2):
-    # Check if both variables are nonzero
     if var1 == 0 or var2 == 0:
-        return f'{var1}:{var2}:Indeterminate'
+        return var1, var2, "Indeterminate"
 
-    # Calculate the ratio
     actual_ratio1 = var1 / var2
     actual_ratio2 = var2 / var1
 
-    # Check if the actual ratio is equal to the expected ratio
     if actual_ratio1 >= 3/1:
-        return f'{var1}:{var2}:{class1}'
-    elif actual_ratio2 >= 3/1:
-        return f'{var2}:{var1}:{class2}'
-    else:
-        return f'{var1}:{var2}:Indeterminate'
+        return var1, var2, class1
+    if actual_ratio2 >= 3/1:
+        return var2, var1, class2
+
+    return var1, var2, "Indeterminate"
 
 # Define the function to check discordance
 def check_discordance(array):
@@ -91,8 +135,11 @@ def check_discordance(array):
     ps3_count = 0
     hypomorph_count = 0
 
-    # Count occurrences of 'BS3', 'PS3', and 'hypomorph'
+    # Clean and count occurrences of 'BS3', 'PS3', and 'hypomorph'
+    cleaned_array = []
     for item in array:
+        item = re.sub(r"\(T\d+\)", "", item)  # Remove (Txxx)
+        cleaned_array.append(item)
         if isinstance(item, str):
             if 'BS3' in item:
                 bs3_count += 1
@@ -101,36 +148,39 @@ def check_discordance(array):
             if 'hypomorph' in item:
                 hypomorph_count += 1
 
-    array = [item for item in array if not (isinstance(item, float) and math.isnan(item))]
-    # Check for the presence of 'BS3', 'PS3', and 'Indeterminate'
-    bs3_present = any('BS3' in item for item in array)
-    ps3_present = any('PS3' in item for item in array)
-    hypomorph_present = 'hypomorph' in array
+    # Remove NaN values
+    cleaned_array = [item for item in cleaned_array if not (isinstance(item, float) and math.isnan(item))]
 
-    # Check for discordance conditions
-    if (bs3_present and ps3_present):
-        ratio_validation = is_valid_ratio(bs3_count, ps3_count, "Benign", "Pathogenic")
-        return f'Discordant:Discordant:{ratio_validation}'
+    # Corrected presence checks
+    bs3_present = any('BS3' in item for item in cleaned_array)
+    ps3_present = any('PS3' in item for item in cleaned_array)
+    hypomorph_present = any('hypomorph' in item for item in cleaned_array)
 
-    elif (bs3_present and hypomorph_present):
-        ratio_validation = is_valid_ratio(bs3_count, hypomorph_count, "Benign", "Hypomorph")
-        return f'Hypomorph:Discordant:{ratio_validation}'
+    # Get the strongest classification
+    strongest_classification = get_strongest_classification(cleaned_array)
 
-    elif (ps3_present and hypomorph_present):
-        ratio_validation = is_valid_ratio(ps3_count, hypomorph_count, "Pathogenic", "Hypomorph")
-        return f'Hypomorph:Discordant:{ratio_validation}'
+    # Discordance logic
+    if bs3_present and ps3_present:
+        var1, var2, classification = is_valid_ratio(bs3_count, ps3_count, "Benign", "Pathogenic")
+        if bs3_count > ps3_count:
+            strongest_classification = get_strongest_classification(cleaned_array, "BS3")
+            return 'Benign', 'Discordant', var1, var2, classification, strongest_classification
+        strongest_classification = get_strongest_classification(cleaned_array, "PS3")
+        return 'Pathogenic', 'Discordant', var1, var2, classification, strongest_classification
+    if bs3_present and hypomorph_present:
+        var1, var2, classification = is_valid_ratio(bs3_count, hypomorph_count, "Benign", "Hypomorph")
+        return 'Benign', 'Hypomorph', var1, var2, classification, strongest_classification
+    if ps3_present and hypomorph_present:
+        var1, var2, classification = is_valid_ratio(ps3_count, hypomorph_count, "Pathogenic", "Hypomorph")
+        return 'Pathogenic', 'Hypomorph', var1, var2, classification, strongest_classification
+    if bs3_present:
+        return 'Benign', 'Concordant', bs3_count, '-', '-', strongest_classification
+    if ps3_present:
+        return 'Pathogenic', 'Concordant', ps3_count, '-', '-', strongest_classification
+    if hypomorph_present:
+        return 'Hypomorph', '-', hypomorph_count, '-', '-', strongest_classification
 
-    elif bs3_present:
-        return f'Benign:Concordant:{bs3_count}:-:-'
-
-    elif ps3_present:
-        return f'Pathogenic:Concordant:{ps3_count}:-:-'
-
-    elif hypomorph_present:
-        return f'Hypomorph:Concordant:{hypomorph_count}:-:-'
-
-    else:
-        return 'indeterminate:indeterminate:-:-:-'
+    return 'Indeterminate', '-', '-', '-', '-', strongest_classification
 
 def BuildDict(tab_data):
     # Initialize an empty dictionary to store the final result
@@ -148,13 +198,34 @@ def BuildDict(tab_data):
             dict_1[key_A] = {}
 
         # Assign values to the inner dictionary
-        dict_1[key_A]["0"] = value_C
-        dict_1[key_A]["2"] = value_B
+        if value_C in ["BS3", "BS3_moderate", "BS3_supporting", "Indeterminate"]:
+            dict_1[key_A]["0"] = value_C
+
+        if value_B in ["PS3", "PS3_moderate", "PS3_supporting", "Indeterminate"]:
+            dict_1[key_A]["2"] = value_B
+
     return dict_1
 
-def GetResults(df, df2,name):
+def merge_with_metadata(out_put_dict, metadata):
+    """
+    Merges the out_put_dict with the metadata DataFrame using a left join.
+    Adds classification results from check_discordance as separate columns.
+    """
+    results = []
+    for key, value in out_put_dict.items():
+        discordance_result = check_discordance(value)
+        results.append((key, value, *discordance_result))
+
+    # Convert to DataFrame
+    out_put_df = pd.DataFrame(results, columns=["index", "All_classes", "Classification", "Status", "Count Pathogenic class", "Count Benign class", "Prepon. Class", "Strongest Classification"])
+    out_put_df.set_index("index", inplace=True)
+
+    # Perform a left merge with the metadata
+    merged_df = metadata.merge(out_put_df, left_index=True, right_index=True, how="left")
+    return merged_df
+
+def GetResults(df, df2, metadata, name):
     class_braca1_all_spli = BuildDict(df2)
-    # You can continue building dictionaries for other columns in a similar manner
     out_put_dict = {}
 
     for column in df.columns:
@@ -166,30 +237,35 @@ def GetResults(df, df2,name):
                         class_target = class_braca1_all_spli[column][value]
                     else:
                         class_target = "hypomorph"
-                    # Append class_target to out_put_dict
                     if index not in out_put_dict:
                         out_put_dict[index] = []
-                    out_put_dict[index].append(class_target +f"({column})")
+                    out_put_dict[index].append(class_target + f"({column})")
                 except:
                     pass
 
+    # Merge out_put_dict with metadata
+    merged_df = merge_with_metadata(out_put_dict, metadata)
+
+    # Filter out rows where "All_classes" is empty or NaN
+    filtered_df = merged_df[merged_df["All_classes"].notna() & merged_df["All_classes"].astype(bool)]
+
+    # Save the filtered DataFrame to a file
+    filtered_df.to_csv(f'merged_output_7_{name}.csv')
+
     # Write out_put_dict to a file
     arrays = []
-    with open(f'output_v12_{name}.txt', 'w') as file:
-        print(out_put_dict) 
-        print(type(out_put_dict))
-        for key, value in out_put_dict.items():
-            discordance_result = check_discordance(value)
-            arrays.append(value)
-            file.write(f"{key}:{discordance_result}:{value}\n")
-            #file.write(f"Row {key}: {value}\n")
+#    with open(f'output_v6_{name}.txt', 'w') as file:
+#        for key, value in out_put_dict.items():
+#            discordance_result = check_discordance(value)
+#            arrays.append(value)
+#            file.write(f"{key}:{discordance_result}:{value}\n")
 
-    result = count_categories(arrays)
-    print("Total count:", result)
+#    result = count_categories(arrays)
+#    print("Total count:", result)
 
-def GetResultsClean(df, df2,name):
+
+def GetResultsClean(df, df2, metadata, name):
     class_braca1_all_spli = BuildDict(df2)
-    # You can continue building dictionaries for other columns in a similar manner
     out_put_dict = {}
 
     for column in df.columns:
@@ -202,24 +278,30 @@ def GetResultsClean(df, df2,name):
                         if class_target != "Indeterminate":
                             if index not in out_put_dict:
                                 out_put_dict[index] = []
-                            out_put_dict[index].append(class_target +f"({column})")
+                            out_put_dict[index].append(class_target + f"({column})")
                 except:
                     pass
 
+    # Merge out_put_dict with metadata
+    merged_df = merge_with_metadata(out_put_dict, metadata)
+
+    # Filter out rows where "All_classes" is empty or NaN
+    filtered_df = merged_df[merged_df["All_classes"].notna() & merged_df["All_classes"].astype(bool)]
+
+    # Save the filtered DataFrame to a file
+    filtered_df.to_csv(f'merged_output_Clean_7_{name}.csv')
+
     # Write out_put_dict to a file
-    arrays = []
-    with open(f'output_Clean_v12_{name}.txt', 'w') as file:
-        # Sort the dictionary by extracting the first number from the value
-        for key, value in out_put_dict.items():
-            discordance_result = check_discordance(value)
-            arrays.append(value)
-            file.write(f"{key}:{discordance_result}:{value}\n")
-            #file.write(f"Row {key}: {value}\n")
-
-    result = count_categories(arrays)
-    print("Total count:", result)
-
-file_path = "./dataset/SUPP_TABLES_BRCA12_JAN_2025_V4.xlsx"
+#    arrays = []
+#    with open(f'output_Clean_v6_{name}.txt', 'w') as file:
+#        for key, value in out_put_dict.items():
+#            discordance_result = check_discordance(value)
+#            arrays.append(value)
+#            file.write(f"{key}:{discordance_result}:{value}\n")
+#
+#    result = count_categories(arrays)
+#    print("Total count:", result)
+file_path = "./dataset/SUPP_TABLES_BRCA12_JAN_2025_V6.xlsx"
 sheet_name_BRCA1_table = "Sup Table 1"
 sheet_name_BRCA2_table = "Sup Table 2"
 sheet_name_BRCA1_class = "Sup Table 10"
@@ -232,20 +314,20 @@ brca2_class = pd.read_excel(file_path, sheet_name=sheet_name_BRCA2_class, engine
 
 def CleanDf(df, type=None):
     if type == "table":
+        metadata_df = df.iloc[:, :]
         start_col_index = df.columns.get_loc('T8')
         df = df.iloc[:, start_col_index:]
-        return df
+        return df, metadata_df
     else:
         df_class = df.iloc[:, [0, -2, -1]]
         return df_class
 
-brca1_df = CleanDf(brca1_df_full, "table")
-brca2_df = CleanDf(brca2_df_full, "table")
+brca1_df, brca1_metadata_df = CleanDf(brca1_df_full, "table")
+brca2_df, brca2_metadata_df = CleanDf(brca2_df_full, "table")
 brca1_class = CleanDf(brca1_class)
 brca2_class = CleanDf(brca2_class)
 
-GetResults(brca1_df, brca1_class, "BRCA1")
-GetResults(brca2_df, brca2_class, "BRCA2")
-GetResultsClean(brca1_df, brca1_class, "BRCA1")
-GetResultsClean(brca2_df, brca2_class, "BRCA2")
-
+GetResults(brca1_df, brca1_class, brca1_metadata_df, "BRCA1")
+GetResults(brca2_df, brca2_class, brca2_metadata_df, "BRCA2")
+GetResultsClean(brca1_df, brca1_class, brca1_metadata_df, "BRCA1")
+GetResultsClean(brca2_df, brca2_class, brca2_metadata_df, "BRCA2")
