@@ -14,12 +14,12 @@ def get_assays_distribution(df):
     """
     # Initialize a dictionary to track how many columns had each count of variants tested
     variants_count_distribution = {}
-    
+
     # Iterate over the columns starting from T8 (index 7 and onward)
     for column in df.columns[7:]:  # assuming T8 starts at index 7
         # Count the number of non-null variants tested in the column
         variants_tested = df[column].notnull().sum()
-        
+
         # Update the distribution dictionary
         if variants_tested in variants_count_distribution:
             variants_count_distribution[variants_tested] += 1

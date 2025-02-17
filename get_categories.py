@@ -186,7 +186,7 @@ def BuildDict(tab_data):
     # Initialize an empty dictionary to store the final result
     dict_1 = {}
     # Iterate through each row in the DataFrame
-    for index, row in tab_data.iterrows():
+    for _, row in tab_data.iterrows():
         # Extract the values from the first three columns (adjust column names as needed)
         key_A = str(row.iloc[0])  # Assuming the first column contains the keys
         value_B = row.iloc[1]      # Assuming the second column contains the values for key '2'
@@ -253,7 +253,7 @@ def GetResults(df, df2, metadata, name):
     filtered_df.to_csv(f'merged_output_7_{name}.csv')
 
     # Write out_put_dict to a file
-    arrays = []
+#    arrays = []
 #    with open(f'output_v6_{name}.txt', 'w') as file:
 #        for key, value in out_put_dict.items():
 #            discordance_result = check_discordance(value)
@@ -264,32 +264,32 @@ def GetResults(df, df2, metadata, name):
 #    print("Total count:", result)
 
 
-def GetResultsClean(df, df2, metadata, name):
-    class_braca1_all_spli = BuildDict(df2)
-    out_put_dict = {}
-
-    for column in df.columns:
-        for index, value in df[column].items():
-            if pd.notna(value):
-                try:
-                    value = str(int(value))
-                    if value != "1":
-                        class_target = class_braca1_all_spli[column][value]
-                        if class_target != "Indeterminate":
-                            if index not in out_put_dict:
-                                out_put_dict[index] = []
-                            out_put_dict[index].append(class_target + f"({column})")
-                except:
-                    pass
-
-    # Merge out_put_dict with metadata
-    merged_df = merge_with_metadata(out_put_dict, metadata)
-
-    # Filter out rows where "All_classes" is empty or NaN
-    filtered_df = merged_df[merged_df["All_classes"].notna() & merged_df["All_classes"].astype(bool)]
-
-    # Save the filtered DataFrame to a file
-    filtered_df.to_csv(f'merged_output_Clean_7_{name}.csv')
+#def GetResultsClean(df, df2, metadata, name):
+#    class_braca1_all_spli = BuildDict(df2)
+#    out_put_dict = {}
+#
+#    for column in df.columns:
+#        for index, value in df[column].items():
+#            if pd.notna(value):
+#                try:
+#                    value = str(int(value))
+#                    if value != "1":
+#                        class_target = class_braca1_all_spli[column][value]
+#                        if class_target != "Indeterminate":
+#                            if index not in out_put_dict:
+#                                out_put_dict[index] = []
+#                            out_put_dict[index].append(class_target + f"({column})")
+#                except:
+#                    pass
+#
+#    # Merge out_put_dict with metadata
+#    merged_df = merge_with_metadata(out_put_dict, metadata)
+#
+#    # Filter out rows where "All_classes" is empty or NaN
+#    filtered_df = merged_df[merged_df["All_classes"].notna() & merged_df["All_classes"].astype(bool)]
+#
+#    # Save the filtered DataFrame to a file
+#    filtered_df.to_csv(f'merged_output_Clean_7_{name}.csv')
 
     # Write out_put_dict to a file
 #    arrays = []
@@ -329,5 +329,5 @@ brca2_class = CleanDf(brca2_class)
 
 GetResults(brca1_df, brca1_class, brca1_metadata_df, "BRCA1")
 GetResults(brca2_df, brca2_class, brca2_metadata_df, "BRCA2")
-GetResultsClean(brca1_df, brca1_class, brca1_metadata_df, "BRCA1")
-GetResultsClean(brca2_df, brca2_class, brca2_metadata_df, "BRCA2")
+#GetResultsClean(brca1_df, brca1_class, brca1_metadata_df, "BRCA1")
+#GetResultsClean(brca2_df, brca2_class, brca2_metadata_df, "BRCA2")
