@@ -64,6 +64,19 @@ def is_valid_ratio(var1, var2, class1, class2):
 
     return var1, var2, "Indeterminate"
 
+
+def highest_value(bs3_count, ps3_count, hypomorph_count):
+    # Create a list of the counts
+    counts = [bs3_count, ps3_count, hypomorph_count]
+
+    # Find the highest value
+    highest = max(counts)
+
+    # Compute the sum of the lower values
+    sum_of_lowers = sum(counts) - highest
+
+    return highest, sum_of_lowers
+
 # Define the function to check discordance
 def check_discordance(array):
     bs3_count = 0
@@ -83,6 +96,9 @@ def check_discordance(array):
             if 'hypomorph' in item:
                 hypomorph_count += 1
 
+
+    higher_count, lower_count = highest_value(bs3_count, ps3_count, hypomorph_count)
+
     # Remove NaN values
     cleaned_array = [item for item in cleaned_array if not (isinstance(item, float) and math.isnan(item))]
 
@@ -101,7 +117,7 @@ def check_discordance(array):
 
     # return format = Concordance, Preponderance of evidence, Final Code, Notes, Hypomorph observation 
     if bs3_present and ps3_present:
-        var1, var2, classification = is_valid_ratio(bs3_count, ps3_count, "Benign", "Pathogenic")
+        _, _, classification = is_valid_ratio(higher_count, lower_count, "Benign", "Pathogenic")
         if classification == "Indeterminate":
             return 'Discordant', classification, 'VUS', 'Indeterminate', hypo_obs
         if bs3_count > ps3_count:
@@ -111,12 +127,12 @@ def check_discordance(array):
             strongest_classification = get_strongest_classification(cleaned_array, "PS3")
             return 'Discordant', classification, strongest_classification, "Pathogenic", hypo_obs
     if bs3_present and hypomorph_present:
-        var1, var2, classification = is_valid_ratio(bs3_count, hypomorph_count, "Benign", "Hypomorph")
+        _, _, classification = is_valid_ratio(higher_count, lower_count, "Benign", "Hypomorph")
         if classification == "Indeterminate":
             return 'Discordant', classification, "VUS", "Indeterminate", hypo_obs
         return 'Discordant', classification, strongest_classification, "Benign", hypo_obs
     if ps3_present and hypomorph_present:
-        var1, var2, classification = is_valid_ratio(ps3_count, hypomorph_count, "Pathogenic", "Hypomorph")
+        _, _, classification = is_valid_ratio(higher_count, lower_count, "Pathogenic", "Hypomorph")
         if classification == "Indeterminate":
             return 'Discordant', classification, "VUS", "Indeterminate", hypo_obs
         return 'Discordant', classification, strongest_classification, "Pathogenic", hypo_obs
@@ -197,7 +213,7 @@ def GetResults(df, df2, metadata, name):
     selected_columns_df = pd.concat([filtered_df.iloc[:, :7], filtered_df.iloc[:, -6:]], axis=1)
 
     # Save the filtered DataFrame to a file
-    selected_columns_df.to_csv(f'merged_output_8_{name}.csv')
+    selected_columns_df.to_csv(f'merged_output_9_{name}.csv')
 
 file_path = "./dataset/SUPP_TABLES_BRCA12_JAN_2025_V6.xlsx"
 sheet_name_BRCA1_table = "Sup Table 1"
