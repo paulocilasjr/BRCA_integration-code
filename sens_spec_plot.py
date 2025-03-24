@@ -55,7 +55,7 @@ def plot_sens_spec(df_clean, track_labels, tab_name):
     ax1.set_xlim(min(x) - spacing_factor / 2, max(x) + spacing_factor / 2)
 
     plt.tight_layout()
-    plt.savefig(f'{tab_name}_sensitivity_with_ci_colored_labels.png', dpi=300, bbox_inches='tight')
+    plt.savefig(f'{tab_name}_sensitivity_with_ci_colored_labels.svg', dpi=300, bbox_inches='tight')
     plt.show()
 
     # === Specificity Plot ===
@@ -89,7 +89,7 @@ def plot_sens_spec(df_clean, track_labels, tab_name):
     ax2.set_xlim(min(x) - spacing_factor / 2, max(x) + spacing_factor / 2)
 
     plt.tight_layout()
-    plt.savefig(f'{tab_name}_specificity_with_ci_colored_labels.png', dpi=300, bbox_inches='tight')
+    plt.savefig(f'{tab_name}_specificity_with_ci_colored_labels.svg', dpi=300, bbox_inches='tight')
     plt.show()
 
 # Plot for BRCA1
