@@ -1,3 +1,4 @@
+
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
@@ -8,6 +9,16 @@ df_brca2 = pd.read_excel('./dataset/sens_spec_table_V1.xlsx', sheet_name='BRCA2'
 
 # Function to plot Sensitivity and Specificity with CI
 def plot_sens_spec(df_clean, track_labels, tab_name):
+    # Filter out rows where Sensitivity or Specificity are 0 (using > 0 to catch zeros)
+    mask = (df_clean['Sensitivity'] > 0) & (df_clean['Specificity'] > 0)
+    df_clean = df_clean[mask].reset_index(drop=True)
+    track_labels = track_labels[mask].reset_index(drop=True)
+    
+    # If no data remains after filtering, skip plotting
+    if len(df_clean) == 0:
+        print(f"No valid data to plot for {tab_name}")
+        return
+
     # Prepare x-axis
     spacing_factor = 2.2
     x = np.arange(len(df_clean)) * spacing_factor
@@ -89,3 +100,4 @@ def plot_sens_spec(df_clean, track_labels, tab_name):
 # Plot for BRCA1 and BRCA2
 plot_sens_spec(df_brca1, df_brca1['Track'], 'BRCA1')
 plot_sens_spec(df_brca2, df_brca2['Track'], 'BRCA2')
+
