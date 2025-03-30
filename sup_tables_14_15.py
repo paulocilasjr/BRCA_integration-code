@@ -24,11 +24,13 @@ print("Excel file loaded successfully.")
 def classify_odds(odds):
     if pd.isna(odds):  # Check for NaN
         return None
-    odds = round(odds, 2)  # Round to 2 decimal places before classification
+    odds = round(odds, 9)  # Round to 2 decimal places before classification
 
     # Classify the odds value
+    if odds == 0:
+        return 0
     thresholds = [0.0029, 0.053, 0.231, 0.48, 2.08, 4.33, 18.7, 350]
-    scores = [-4, -4, -2, -1, 0, 1, 2, 4, 4]
+    scores = [-8, -4, -2, -1, 0, 1, 2, 4]
     for threshold, score in zip(thresholds, scores):
         if odds <= threshold:
             return score
@@ -144,7 +146,7 @@ df_brca1_final = add_acmg_points(df_brca1, brca1_results, brca1_results_tracks)
 df_brca2_final = add_acmg_points(df_brca2, brca2_results, brca2_results_tracks)
 
 # Save the DataFrames as CSV files
-df_brca1_final.to_csv("brca1_acmg_score_v2.csv", index=False)
-df_brca2_final.to_csv("brca2_acmg_score_v2.csv", index=False)
+df_brca1_final.to_csv("brca1_acmg_score_v3.csv", index=False)
+df_brca2_final.to_csv("brca2_acmg_score_v3.csv", index=False)
 
 print("CSV files saved successfully.")
