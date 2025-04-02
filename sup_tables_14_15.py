@@ -6,7 +6,7 @@ import re
 from time import sleep
 
 # Load the dataset
-file_path = "./dataset/SUPP_TABLES_BRCA12_JAN_2025_V6.xlsx"
+file_path = "./dataset/SUPP_TABLES_BRCA12_JAN_2025_V6_alpha.xlsx"
 BRCA1_table = "Sup Table 1"
 BRCA2_table = "Sup Table 2"
 BRCA1_class = "Sup Table 10"
@@ -146,7 +146,7 @@ df_brca1_final = add_acmg_points(df_brca1, brca1_results, brca1_results_tracks)
 df_brca2_final = add_acmg_points(df_brca2, brca2_results, brca2_results_tracks)
 
 # Save the DataFrames as CSV files
-df_brca1_final.to_csv("brca1_acmg_score_v3.csv", index=False)
-df_brca2_final.to_csv("brca2_acmg_score_v3.csv", index=False)
+df_brca1_final.to_csv("brca1_acmg_score_v4_alpha.csv", index=False)
+df_brca2_final.to_csv("brca2_acmg_score_v4_alpha.csv", index=False)
 
 print("CSV files saved successfully.")
