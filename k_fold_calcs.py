@@ -1,3 +1,4 @@
+
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import KFold
@@ -6,7 +7,7 @@ from sklearn.model_selection import KFold
 file_path = "./dataset/SUPP_TABLES_BRCA12_JAN_2025_V6.xlsx"
 BRCA1_table = "Sup Table 1"
 BRCA2_table = "Sup Table 2"
-OUTPUT_NAME = "classification_results_4.xlsx"
+OUTPUT_NAME = "classification_results_10fold_V2.xlsx"
 
 print("Reading Excel file...")
 df_brca1 = pd.read_excel(file_path, sheet_name=BRCA1_table, header=1)
@@ -139,11 +140,10 @@ def process_table(df, table_name, writer):
 
         tp = ((final_class == 2) & pathogenic).sum()
         tn = ((final_class == 0) & benign).sum()
-        fp = ((final_class == 2) & ~pathogenic).sum()
-        fn = ((final_class == 0) & ~benign).sum()
+        fp = ((final_class == 2) & benign).sum()
+        fn = ((final_class == 0) & pathogenic).sum()
 
-        fn += ((final_class == 1) & pathogenic).sum()
-        fp += ((final_class == 1) & benign).sum()
+        no_class = (final_class == 1).sum()
 
         sensitivity = tp / (tp + fn) if (tp + fn) > 0 else np.nan
         specificity = tn / (tn + fp) if (tn + fp) > 0 else np.nan
@@ -169,7 +169,8 @@ def process_table(df, table_name, writer):
             "true_positive": tp,
             "false_positive": fp,
             "true_negative": tn,
-            "false_negative": fn
+            "false_negative": fn,
+            "no_classification_count": no_class
         })
 
     metrics_df = pd.DataFrame(metrics_list)
@@ -181,3 +182,4 @@ with pd.ExcelWriter(OUTPUT_NAME, engine="xlsxwriter") as writer:
     process_table(df_brca2, "BRCA2", writer)
 
 print(f"Results saved to {OUTPUT_NAME}")
+
