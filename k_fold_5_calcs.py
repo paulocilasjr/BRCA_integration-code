@@ -1,12 +1,12 @@
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import KFold
+from sklearn.model_selection import KFold  # Changed back to KFold
 
 # Load the dataset
 file_path = "./dataset/SUPP_TABLES_BRCA12_JAN_2025_V6.xlsx"
 BRCA1_table = "Sup Table 1"
 BRCA2_table = "Sup Table 2"
-OUTPUT_NAME = "classification_results_5fold_V2.xlsx"
+OUTPUT_NAME = "classification_results_5fold_V3.xlsx"
 
 print("Reading Excel file...")
 df_brca1 = pd.read_excel(file_path, sheet_name=BRCA1_table, header=1)
@@ -68,11 +68,18 @@ def get_final_classification(classification_str):
 
 # Function to process each dataset
 def process_table(df, table_name, writer):
+    # Initial filter for rows where T6 is not NaN
     df = df[df["T6"].notna()].copy()
-    kf = KFold(n_splits=5, shuffle=True, random_state=42)
-    classification_results = df[["T1", "T2", "T3", "T4", "T5", "T6"]].copy()
+
+    # Get the starting index of T8
     start_col_index = df.columns.get_loc("T8")
 
+    # Filter rows where at least one column from T8 to the end has a non-null value
+    df = df[df.iloc[:, start_col_index:].notna().any(axis=1)].copy()
+
+    # Proceed with KFold (5 splits)
+    kf = KFold(n_splits=5, shuffle=True, random_state=42)
+    classification_results = df[["T1", "T2", "T3", "T4", "T5", "T6"]].copy()
     for fold, (train_index, test_index) in enumerate(kf.split(df), 1):
         print(f"Processing fold {fold} for {table_name}...")
         train_df = df.iloc[train_index].copy()
@@ -171,7 +178,6 @@ def process_table(df, table_name, writer):
             "false_negative": fn,
             "no_classification_count": no_class
         })
-
 
     metrics_df = pd.DataFrame(metrics_list)
     metrics_df.to_excel(writer, sheet_name=f"{table_name}_k_fold_spec_sens", index=False)

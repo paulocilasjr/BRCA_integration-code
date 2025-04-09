@@ -1,13 +1,12 @@
-
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import KFold
+from sklearn.model_selection import KFold  # Changed back to KFold
 
 # Load the dataset
 file_path = "./dataset/SUPP_TABLES_BRCA12_JAN_2025_V6.xlsx"
 BRCA1_table = "Sup Table 1"
 BRCA2_table = "Sup Table 2"
-OUTPUT_NAME = "classification_results_10fold_V2.xlsx"
+OUTPUT_NAME = "classification_results_10fold_V3.xlsx"
 
 print("Reading Excel file...")
 df_brca1 = pd.read_excel(file_path, sheet_name=BRCA1_table, header=1)
@@ -69,10 +68,18 @@ def get_final_classification(classification_str):
 
 # Function to process each dataset
 def process_table(df, table_name, writer):
+    # Initial filter for rows where T6 is not NaN
     df = df[df["T6"].notna()].copy()
+
+    # Get the starting index of T8
+    start_col_index = df.columns.get_loc("T8")
+
+    # Filter rows where at least one column from T8 to the end has a non-null value
+    df = df[df.iloc[:, start_col_index:].notna().any(axis=1)].copy()
+
+    # Proceed with KFold (10 splits)
     kf = KFold(n_splits=10, shuffle=True, random_state=42)
     classification_results = df[["T1", "T2", "T3", "T4", "T5", "T6"]].copy()
-    start_col_index = df.columns.get_loc("T8")
 
     for fold, (train_index, test_index) in enumerate(kf.split(df), 1):
         print(f"Processing fold {fold} for {table_name}...")
@@ -118,17 +125,17 @@ def process_table(df, table_name, writer):
 
         classification_results.loc[test_df.index, f"Fold_{fold}"] = test_df.apply(classify_variant, axis=1)
 
-    # Add final classification
+    # Add final classification (already set for 10 folds)
     for fold in range(1, 11):
         classification_results[f"Final_Fold_{fold}"] = classification_results[f"Fold_{fold}"].apply(get_final_classification)
 
-    # Save detailed and final classifications
+    # Save detailed and final classifications (already set for 10 folds)
     detailed_cols = ["T1", "T2", "T3", "T4", "T5", "T6"] + [f"Fold_{fold}" for fold in range(1, 11)]
     classification_results[detailed_cols].to_excel(writer, sheet_name=f"{table_name}_detailed", index=False)
     final_cols = ["T1", "T2", "T3", "T4", "T5", "T6"] + [f"Final_Fold_{fold}" for fold in range(1, 11)]
     classification_results[final_cols].to_excel(writer, sheet_name=f"{table_name}_final_classification", index=False)
 
-    # Compute metrics with 95% CI
+    # Compute metrics with 95% CI (already set for 10 folds)
     metrics_list = []
     for fold in range(1, 11):
         valid_variants = classification_results[f"Fold_{fold}"].notna() & (classification_results[f"Fold_{fold}"] != "")
@@ -182,4 +189,3 @@ with pd.ExcelWriter(OUTPUT_NAME, engine="xlsxwriter") as writer:
     process_table(df_brca2, "BRCA2", writer)
 
 print(f"Results saved to {OUTPUT_NAME}")
-
