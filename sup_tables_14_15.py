@@ -1,152 +1,103 @@
 import pandas as pd
-import numpy as np
-import sys  # Import sys to exit script if condition is not met
 import re
+import ast
+import openpyxl  # Required for Excel output
 
-from time import sleep
-
-# Load the dataset
-file_path = "./dataset/SUPP_TABLES_BRCA12_JAN_2025_V6_alpha.xlsx"
-BRCA1_table = "Sup Table 1"
-BRCA2_table = "Sup Table 2"
-BRCA1_class = "Sup Table 10"
-BRCA2_class = "Sup Table 11"
-
-print("Reading Excel file...")
-df_brca1 = pd.read_excel(file_path, sheet_name=BRCA1_table, header=1)
-df_brca2 = pd.read_excel(file_path, sheet_name=BRCA2_table, header=1)
-brca1_class = pd.read_excel(file_path, sheet_name=BRCA1_class, header=2)
-brca2_class = pd.read_excel(file_path, sheet_name=BRCA2_class, header=2)
-print("Excel file loaded successfully.")
-
-
-# Function to classify odds
-def classify_odds(odds):
-    if pd.isna(odds):  # Check for NaN
-        return None
-    odds = round(odds, 9)  # Round to 2 decimal places before classification
-
-    # Classify the odds value
-    if odds == 0:
+def parse_vote_to_score(vote: str) -> int:
+    """Parse a vote string to an integer score based on ACMG criteria."""
+    vote = vote.strip()
+    if re.match(r"BS3_supporting\b", vote):
+        return -1
+    elif re.match(r"BS3_moderate\b", vote):
+        return -2
+    elif re.match(r"BS3\b", vote):
+        return -4
+    elif re.match(r"PS3_supporting\b", vote):
+        return 1
+    elif re.match(r"PS3_moderate\b", vote):
+        return 2
+    elif re.match(r"PS3\b", vote):
+        return 4
+    elif re.match(r"hypomorph\b", vote):
         return 0
-    thresholds = [0.0029, 0.053, 0.231, 0.48, 2.08, 4.33, 18.7, 350]
-    scores = [-8, -4, -2, -1, 0, 1, 2, 4]
-    for threshold, score in zip(thresholds, scores):
-        if odds <= threshold:
-            return score
-    return 8  # Default case: odds >= 350
+    return 0  # Default for indeterminate or unknown votes
 
+def safe_parse_votes(votes_raw):
+    """Safely parse a votes string or list into a list of votes."""
+    if pd.isna(votes_raw) or votes_raw == "":
+        return []
+    try:
+        if isinstance(votes_raw, str):
+            return ast.literal_eval(votes_raw)
+        return votes_raw if isinstance(votes_raw, list) else []
+    except Exception as e:
+        print(f"⚠️ Error parsing votes: {str(votes_raw)[:100]} — {e}")
+        return []
 
-# Function to iterate over rows, classify values, and store in dictionary
-def get_scores(df):
-    result_dict = {}
+# === Load and prepare DataFrame ===
+df = pd.read_csv("./results/merged_output_10_BRCA2.csv", sep=",")
+df.columns = [col.strip().lstrip(",") for col in df.columns]
 
-    for _, row in df.iterrows():
-        key = row.iloc[0]  # First column as key
-        value_0 = classify_odds(row.iloc[-3])  # Classify value from column -3
-        value_1 = classify_odds(row.iloc[-4])  # Classify value from column -4
+# Ensure the correct column name is used
+vote_col = next((col for col in df.columns if "All_votes" in col), None)
+if vote_col is None:
+    print(f"❌ Available columns: {list(df.columns)}")
+    raise ValueError("❌ Could not find a column containing 'All_votes' in its name.")
+df.rename(columns={vote_col: "All_votes"}, inplace=True)
 
-        if value_0 is not None and value_0 > 0:
-            value_0 = 0
-        if value_1 is not None and value_1 < 0:
-            value_1 = 0
+# === Convert vote strings to list and compute scores ===
+df["Parsed_votes"] = df["All_votes"].apply(safe_parse_votes)
 
-        result_dict[key] = {0: value_0, 1: value_1}
+# Compute ACMG score strings (e.g., '-4 (T11)')
+def compute_acmg_score(votes):
+    scores = []
+    for v in votes:
+        score = parse_vote_to_score(v)
+        match = re.search(r"T\d+", v)
+        score_str = f"{score} ({match.group()})" if match else str(score)
+        scores.append(score_str)
+    return scores
 
-    return result_dict
+df["ACMG score"] = df["Parsed_votes"].apply(compute_acmg_score)
 
-scores_dict_brca1 = get_scores(brca1_class)
-scores_dict_brca2 = get_scores(brca2_class)
+# Number of assays
+df["Number of assays"] = df["Parsed_votes"].apply(len)
 
+# Final Score
+def compute_final_score(score_list):
+    try:
+        return sum(int(s.split()[0]) for s in score_list)
+    except Exception as e:
+        print(f"⚠️ Error computing final score for {score_list}: {e}")
+        return 0
 
-def process_tracks(df, result_dict):
-    """
-    Iterate over all columns in the given dataframe starting from column "T8".
-    For each row, retrieve values based on the result_dict mapping.
+df["Final Score"] = df["ACMG score"].apply(compute_final_score)
 
-    Args:
-        df (pd.DataFrame): DataFrame containing track data.
-        result_dict (dict): Dictionary mapping track numbers (columns) to classification values.
+# Capped Final Score
+def cap_score(score):
+    if score < -4:
+        return -4
+    if score > 4:
+        return 4
+    return score
 
-    Returns:
-        dict: Dictionary where each row index maps to an array of retrieved values.
-    """
-    start_col_index = df.columns.get_loc("T8")  # Find the index of the first track column
-    row_results = {}  # Dictionary to store lists of values for each row index
-    row_results_tracks = {}
+df["Capped Final"] = df["Final Score"].apply(cap_score)
 
-    for index, row in df.iterrows():
-        track_values = []  # List to store retrieved values for this row
-        track_values_tracks = []
+# === Drop helper column before saving ===
+df.drop(columns=["Parsed_votes"], inplace=True)
 
-        for col in df.columns[start_col_index:]:  # Iterate over track columns
-            if pd.notna(row[col]):  # Only consider non-empty values
-                track_key = col  # Column name corresponds to track key in result_dict
-                if track_key in result_dict:
-                    if row[col] == 0:
-                        track_values.append(result_dict[track_key][0])  # Retrieve value_0
-                        track_values_tracks.append(f"{result_dict[track_key][0]} ({col})")
-                    elif row[col] == 2:
-                        track_values.append(result_dict[track_key][1])  # Retrieve value_1
-                        track_values_tracks.append(f"{result_dict[track_key][1]} ({col})")
-                    else:
-                        track_values.append(0)  # Default value for other cases
-                        track_values_tracks.append(f"0 ({col})")
-        # Store the values in the dictionary under the row index
-        if track_values:
-            row_results[index] = track_values
-            row_results_tracks[index] = track_values_tracks
+# === Ensure column order matches the example, explicitly keeping INDEX ===
+desired_columns = [
+    "INDEX", "T1", "T2", "T3", "T4", "T5", "T6", "T7",
+    "All_votes (track)", "Concordance", "Preponderance of evidence",
+    "Final code", "Notes", "Hypomorph observation",
+    "ACMG score", "Number of assays", "Final Score", "Capped Final"
+]
+# Filter to keep only columns that exist in the DataFrame
+existing_columns = [col for col in desired_columns if col in df.columns]
+df = df[existing_columns]
 
-    return row_results, row_results_tracks
+# === Save the new file as Excel ===
+df.to_excel("merged_output_10_BRCA2_scored.xlsx", index=False)
 
-# Process BRCA1 and BRCA2 datasets
-brca1_results, brca1_results_tracks = process_tracks(df_brca1, scores_dict_brca1)
-brca2_results, brca2_results_tracks = process_tracks(df_brca2, scores_dict_brca2)
-
-def add_acmg_points(df, row_results, row_results_tracks):
-    """
-    Adds the ACMG Points System and Final Score columns to the DataFrame, keeping only relevant columns.
-
-    Args:
-        df (pd.DataFrame): Original DataFrame containing track data.
-        row_results (dict): Dictionary with row index as key and computed ACMG values as list.
-
-    Returns:
-        pd.DataFrame: Filtered DataFrame with the ACMG Points System and Final Score columns added.
-    """
-    # Keep only columns up to "T7"
-    relevant_columns = df.loc[:, : "T7"].copy()
-
-    # Function to extract the numeric value from the string
-    def extract_numeric_value(track_data):
-        if isinstance(track_data, int):
-            return track_data  # Directly return the value if it's an integer
-        # Find all numbers before any parentheses
-        match = re.findall(r'-?\d+', track_data)
-        # Return the first numeric value found (it should be the ACMG points)
-        return int(match[0]) if match else 0
-
-    # Map ACMG Points System to the DataFrame
-    relevant_columns["ACMG Points System"] = relevant_columns.index.map(row_results)
-
-    # Compute Final Score (sum of ACMG Points System, extracting numbers from the track data)
-    relevant_columns["Final Score"] = relevant_columns["ACMG Points System"].apply(
-        lambda x: sum(extract_numeric_value(item) for item in x) if isinstance(x, list) else None
-    )
-
-    relevant_columns["ACMG Points System"] = relevant_columns.index.map(row_results_tracks)
-
-    # Remove rows where ACMG Points System is empty (None or NaN)
-    relevant_columns = relevant_columns.dropna(subset=["ACMG Points System"])
-
-    return relevant_columns
-
-# Apply function to both datasets
-df_brca1_final = add_acmg_points(df_brca1, brca1_results, brca1_results_tracks)
-df_brca2_final = add_acmg_points(df_brca2, brca2_results, brca2_results_tracks)
-
-# Save the DataFrames as CSV files
-df_brca1_final.to_csv("brca1_acmg_score_v4_alpha.csv", index=False)
-df_brca2_final.to_csv("brca2_acmg_score_v4_alpha.csv", index=False)
-
-print("CSV files saved successfully.")
+print("✅ Saved to merged_output_10_BRCA2_scored.xlsx")

@@ -213,9 +213,9 @@ def GetResults(df, df2, metadata, name):
     selected_columns_df = pd.concat([filtered_df.iloc[:, :7], filtered_df.iloc[:, -6:]], axis=1)
 
     # Save the filtered DataFrame to a file
-    selected_columns_df.to_csv(f'merged_output_9_{name}.csv')
+    selected_columns_df.to_csv(f'merged_output_10_{name}.csv')
 
-file_path = "./dataset/SUPP_TABLES_BRCA12_JAN_2025_V6.xlsx"
+file_path = "SUPP_TABLES_BRCA12_JUNE_2025_V2.xlsx"
 sheet_name_BRCA1_table = "Sup Table 1"
 sheet_name_BRCA2_table = "Sup Table 2"
 sheet_name_BRCA1_class = "Sup Table 10"

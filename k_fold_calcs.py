@@ -3,10 +3,10 @@ import numpy as np
 from sklearn.model_selection import KFold  # Changed back to KFold
 
 # Load the dataset
-file_path = "./dataset/SUPP_TABLES_BRCA12_JAN_2025_V6.xlsx"
+file_path = "./dataset/Sharan_modified_SUPP_TABLES_BRCA12_JUNE_2025.xlsx"
 BRCA1_table = "Sup Table 1"
 BRCA2_table = "Sup Table 2"
-OUTPUT_NAME = "classification_results_10fold_V3.xlsx"
+OUTPUT_NAME = "classification_results_10fold_V4.xlsx"
 
 print("Reading Excel file...")
 df_brca1 = pd.read_excel(file_path, sheet_name=BRCA1_table, header=1)
