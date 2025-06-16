@@ -403,7 +403,7 @@ def count_documented_without_t6_and_tested(df):
     return total_documented_without_t6_and_tested
 
 # File path
-file_path = "./dataset/SUPP_TABLES_BRCA12_JAN_2025_V6.xlsx"
+file_path = "./dataset/Fergus_Sharan_modified_SUPP_TABLES_BRCA12_JUNE_2025.xlsx"
 
 # Load "Sup Table 1" and set the second row as column headers
 sheet_name = "Sup Table 1"
