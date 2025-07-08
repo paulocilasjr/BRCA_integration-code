@@ -1,219 +1,150 @@
 import pandas as pd
-from time import sleep
 import math
 import re
 
-# Define classification strength hierarchy
+# === Hierarchies ===
 CLASSIFICATION_HIERARCHY = {
     "BS3": 5, "BS3_moderate": 4, "BS3_supporting": 3,
     "PS3": 5, "PS3_moderate": 4, "PS3_supporting": 3,
     "Hypomorph": 2,
     "Indeterminate": 1
 }
-PS3_HIERARCHY = {
-    "PS3": 5, "PS3_moderate": 4, "PS3_supporting": 3,
-    "Hypomorph": 2,
-    "Indeterminate": 1
-}
-BS3_HIERARCHY = {
-    "BS3": 5, "BS3_moderate": 4, "BS3_supporting": 3,
-    "Hypomorph": 2,
-    "Indeterminate": 1
-}
+PS3_HIERARCHY = CLASSIFICATION_HIERARCHY.copy()
+BS3_HIERARCHY = CLASSIFICATION_HIERARCHY.copy()
 
+# === Utility Functions ===
 def get_strongest_classification(array, categorie=None):
-    """Returns the strongest classification found in the cleaned array."""
     strongest = "Indeterminate"
-    max_strength = 1  # Default to the lowest strength
-
-    if categorie == "BS3":
-        for item in array:
-            if item in BS3_HIERARCHY:
-                strength = BS3_HIERARCHY[item]
-                if strength > max_strength:
-                    max_strength = strength
-                    strongest = item
-    elif categorie == "PS3":
-        for item in array:
-            if item in PS3_HIERARCHY:
-                strength = PS3_HIERARCHY[item]
-                if strength > max_strength:
-                    max_strength = strength
-                    strongest = item
-    else:
-        for item in array:
-            if item in CLASSIFICATION_HIERARCHY:
-                strength = CLASSIFICATION_HIERARCHY[item]
-                if strength > max_strength:
-                    max_strength = strength
-                    strongest = item
-
+    max_strength = 1
+    hierarchy = {
+        None: CLASSIFICATION_HIERARCHY,
+        "PS3": PS3_HIERARCHY,
+        "BS3": BS3_HIERARCHY,
+    }[categorie]
+    for item in array:
+        if item in hierarchy and hierarchy[item] > max_strength:
+            max_strength = hierarchy[item]
+            strongest = item
     return strongest
+
 
 def is_valid_ratio(var1, var2, class1, class2):
     if var1 == 0 or var2 == 0:
         return var1, var2, "Indeterminate"
-
-    actual_ratio1 = var1 / var2
-    actual_ratio2 = var2 / var1
-
-    if actual_ratio1 >= 3/1:
+    if var1 / var2 >= 3:
         return var1, var2, class1
-    if actual_ratio2 >= 3/1:
+    if var2 / var1 >= 3:
         return var2, var1, class2
-
     return var1, var2, "Indeterminate"
 
-
-def highest_value(bs3_count, ps3_count, hypomorph_count):
-    # Create a list of the counts
-    counts = [bs3_count, ps3_count, hypomorph_count]
-
-    # Find the highest value
-    highest = max(counts)
-
-    # Compute the sum of the lower values
-    sum_of_lowers = sum(counts) - highest
-
-    return highest, sum_of_lowers
-
-# Define the function to check discordance
+# === Discordance Logic ===
 def check_discordance(array):
-    bs3_count = 0
-    ps3_count = 0
-    hypomorph_count = 0
-
-    # Clean and count occurrences of 'BS3', 'PS3', and 'hypomorph'
-    cleaned_array = []
+    bs3_count = ps3_count = hypomorph_count = 0
+    cleaned = []
     for item in array:
-        item = re.sub(r"\(T\d+\)", "", item)  # Remove (Txxx)
-        cleaned_array.append(item)
-        if isinstance(item, str):
-            if 'BS3' in item:
-                bs3_count += 1
-            if 'PS3' in item:
-                ps3_count += 1
-            if 'hypomorph' in item:
-                hypomorph_count += 1
+        plain = re.sub(r"\(T\d+\)", "", item)
+        cleaned.append(plain)
+        if "BS3" in plain: bs3_count += 1
+        if "PS3" in plain: ps3_count += 1
+        if "hypomorph" in plain.lower(): hypomorph_count += 1
 
+    bs3_present = bs3_count > 0
+    ps3_present = ps3_count > 0
+    hypomorph_present = hypomorph_count > 0
+    strongest_call = get_strongest_classification(cleaned)
+    hypo_obs = "Y" if hypomorph_present else "N"
 
-    higher_count, lower_count = highest_value(bs3_count, ps3_count, hypomorph_count)
-
-    # Remove NaN values
-    cleaned_array = [item for item in cleaned_array if not (isinstance(item, float) and math.isnan(item))]
-
-    # Corrected presence checks
-    bs3_present = any('BS3' in item for item in cleaned_array)
-    ps3_present = any('PS3' in item for item in cleaned_array)
-    hypomorph_present = any('hypomorph' in item for item in cleaned_array)
-
-    # Get the strongest classification
-    strongest_classification = get_strongest_classification(cleaned_array)
-
-    if hypomorph_present:
-        hypo_obs = "Y"
-    else:
-        hypo_obs = "N"
-
-    # return format = Concordance, Preponderance of evidence, Final Code, Notes, Hypomorph observation 
+    # PS3 vs BS3
     if bs3_present and ps3_present:
-        _, _, classification = is_valid_ratio(higher_count, lower_count, "Benign", "Pathogenic")
-        if classification == "Indeterminate":
-            return 'Discordant', classification, 'VUS', 'Indeterminate', hypo_obs
         if bs3_count > ps3_count:
-            strongest_classification = get_strongest_classification(cleaned_array, "BS3")
-            return 'Discordant', classification, strongest_classification, "Benign", hypo_obs
-        if ps3_count > bs3_count:
-            strongest_classification = get_strongest_classification(cleaned_array, "PS3")
-            return 'Discordant', classification, strongest_classification, "Pathogenic", hypo_obs
+            var1, var2, c1, c2 = bs3_count, ps3_count, "Benign", "Pathogenic"
+            strongest = get_strongest_classification(cleaned, "BS3")
+        else:
+            var1, var2, c1, c2 = ps3_count, bs3_count, "Pathogenic", "Benign"
+            strongest = get_strongest_classification(cleaned, "PS3")
+        _, _, prepon = is_valid_ratio(var1, var2, c1, c2)
+        if prepon == "Indeterminate":
+            return "Discordant", prepon, "VUS", "Indeterminate", hypo_obs
+        return "Discordant", prepon, strongest, prepon, hypo_obs
+
+    # BS3 vs Hypomorph
     if bs3_present and hypomorph_present:
-        _, _, classification = is_valid_ratio(higher_count, lower_count, "Benign", "Hypomorph")
-        if classification == "Indeterminate":
-            return 'Discordant', classification, "VUS", "Indeterminate", hypo_obs
-        return 'Discordant', classification, strongest_classification, "Benign", hypo_obs
+        if bs3_count > hypomorph_count:
+            var1, var2, c1, c2 = bs3_count, hypomorph_count, "Benign", "Hypomorph"
+        else:
+            var1, var2, c1, c2 = hypomorph_count, bs3_count, "Hypomorph", "Benign"
+        _, _, prepon = is_valid_ratio(var1, var2, c1, c2)
+        if prepon == "Indeterminate":
+            return "Discordant", prepon, "VUS", "Indeterminate", hypo_obs
+        return "Discordant", prepon, strongest_call, prepon, hypo_obs
+
+    # PS3 vs Hypomorph
     if ps3_present and hypomorph_present:
-        _, _, classification = is_valid_ratio(higher_count, lower_count, "Pathogenic", "Hypomorph")
-        if classification == "Indeterminate":
-            return 'Discordant', classification, "VUS", "Indeterminate", hypo_obs
-        return 'Discordant', classification, strongest_classification, "Pathogenic", hypo_obs
-    if bs3_present:
-        return 'Concordant', "-", strongest_classification, "Benign", hypo_obs
-    if ps3_present:
-        return 'Concordant', "-", strongest_classification, "Pathogenic", hypo_obs
-    if hypomorph_present:
-        return 'Concordant', '-', 'VUS', 'Hypomorph', hypo_obs
-    return 'Indeterminate', 'Indeterminate', 'VUS', 'Indeterminate', 'N'
+        if ps3_count > hypomorph_count:
+            var1, var2, c1, c2 = ps3_count, hypomorph_count, "Pathogenic", "Hypomorph"
+        else:
+            var1, var2, c1, c2 = hypomorph_count, ps3_count, "Hypomorph", "Pathogenic"
+        _, _, prepon = is_valid_ratio(var1, var2, c1, c2)
+        if prepon == "Indeterminate":
+            return "Discordant", prepon, "VUS", "Indeterminate", hypo_obs
+        return "Discordant", prepon, strongest_call, prepon, hypo_obs
 
+    # Concordant/hypomorph-only
+    if bs3_present: return "Concordant", "-", strongest_call, "Benign", hypo_obs
+    if ps3_present: return "Concordant", "-", strongest_call, "Pathogenic", hypo_obs
+    if hypomorph_present: return "Concordant", "-", "VUS", "Hypomorph", hypo_obs
+
+    return "Indeterminate", "Indeterminate", "VUS", "Indeterminate", "N"
+
+# === Build Mapping ===
 def BuildDict(tab_data):
-    # Initialize an empty dictionary to store the final result
-    dict_1 = {}
-    # Iterate through each row in the DataFrame
+    d = {}
     for _, row in tab_data.iterrows():
-        # Extract the values from the first three columns (adjust column names as needed)
-        key_A = str(row.iloc[0])  # Assuming the first column contains the keys
-        value_B = row.iloc[1]      # Assuming the second column contains the values for key '2'
-        value_C = row.iloc[2]      # Assuming the third column contains the values for key '0'
+        key = str(row.iloc[0]).strip()
+        d.setdefault(key, {})
+        val_b = row.iloc[1]
+        val_c = row.iloc[2]
+        if isinstance(val_c, str) and val_c in CLASSIFICATION_HIERARCHY: d[key]["0"] = val_c
+        if isinstance(val_b, str) and val_b in CLASSIFICATION_HIERARCHY: d[key]["2"] = val_b
+    return d
 
-        # Check if the key already exists in dict_1
-        if key_A not in dict_1:
-            # If it doesn't exist, create a new dictionary for the key
-            dict_1[key_A] = {}
+# === Merge and Export ===
+def merge_with_metadata(out_dict, metadata):
+    rows = []
+    for idx, arr in out_dict.items():
+        conc, pre, fc, notes, hypo = check_discordance(arr)
+        rows.append((idx, arr, conc, pre, fc, notes, hypo))
+    df_out = pd.DataFrame(rows, columns=[
+        "index", "All_votes(track)", "Concordance", "Preponderance of evidence",
+        "Final code", "Notes", "Hypomorph observation"
+    ])
+    df_out.set_index("index", inplace=True)
+    df_out.index = df_out.index.astype(metadata.index.dtype)
+    return metadata.merge(df_out, left_index=True, right_index=True, how="left")
 
-        # Assign values to the inner dictionary
-        if value_C in ["BS3", "BS3_moderate", "BS3_supporting", "Indeterminate"]:
-            dict_1[key_A]["0"] = value_C
-
-        if value_B in ["PS3", "PS3_moderate", "PS3_supporting", "Indeterminate"]:
-            dict_1[key_A]["2"] = value_B
-
-    return dict_1
-
-def merge_with_metadata(out_put_dict, metadata):
-    """
-    Merges the out_put_dict with the metadata DataFrame using a left join.
-    Adds classification results from check_discordance as separate columns.
-    """
-    results = []
-    for key, value in out_put_dict.items():
-        discordance_result = check_discordance(value)
-        results.append((key, value, *discordance_result))
-
-    # Convert to DataFrame
-    out_put_df = pd.DataFrame(results, columns=["index", "All_votes(track)", "Concordance", "Preponderance of evidence", "Final code", "Notes", "Hypomorph observation"])
-    out_put_df.set_index("index", inplace=True)
-
-    # Perform a left merge with the metadata
-    merged_df = metadata.merge(out_put_df, left_index=True, right_index=True, how="left")
-    return merged_df
-
+# === Main Results ===
 def GetResults(df, df2, metadata, name):
-    class_braca1_all_spli = BuildDict(df2)
-    out_put_dict = {}
-
-    for column in df.columns:
-        for index, value in df[column].items():
-            if pd.notna(value):
-                try:
-                    value = str(int(value))
-                    if value != "1":
-                        class_target = class_braca1_all_spli[column][value]
-                    else:
-                        class_target = "hypomorph"
-                    if index not in out_put_dict:
-                        out_put_dict[index] = []
-                    out_put_dict[index].append(class_target + f"({column})")
-                except:
-                    pass
-
-    # Merge out_put_dict with metadata
-    merged_df = merge_with_metadata(out_put_dict, metadata)
-
-    # Filter out rows where "All_classes" is empty or NaN
-    filtered_df = merged_df[merged_df["All_votes(track)"].notna() & merged_df["All_votes(track)"].astype(bool)]
-    selected_columns_df = pd.concat([filtered_df.iloc[:, :7], filtered_df.iloc[:, -6:]], axis=1)
-
-    # Save the filtered DataFrame to a file
-    selected_columns_df.to_csv(f'merged_output_10_{name}.csv')
+    mapping = BuildDict(df2)
+    out = {}
+    for col in df.columns:
+        for idx, val in df[col].items():
+            raw = str(val).strip()
+            if not raw: continue
+            try:
+                assay = int(raw)
+            except ValueError:
+                continue
+            key = idx
+            if assay == 1:
+                cls = "hypomorph"
+            else:
+                cls = mapping.get(str(assay), {}).get("2") or mapping.get(str(assay), {}).get("0")
+                if not cls: continue
+            out.setdefault(key, []).append(f"{cls}({col})")
+    merged = merge_with_metadata(out, metadata)
+    filt = merged[merged["All_votes(track)"].notna() & merged["All_votes(track)"].astype(bool)]
+    sel = pd.concat([filt.iloc[:, :7], filt.iloc[:, -6:]], axis=1)
+    sel.to_csv(f"merged_output_12_{name}.csv")
 
 file_path = "SUPP_TABLES_BRCA12_JUNE_2025_V2.xlsx"
 sheet_name_BRCA1_table = "Sup Table 1"
