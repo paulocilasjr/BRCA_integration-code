@@ -2,7 +2,7 @@ import pandas as pd
 from collections import Counter
 
 # --- Load the Excel file ---
-excel_file = "your_excel_file.xlsx"  # Replace with actual path
+excel_file = "SUPP_TABLES_BRCA12_JULY_2025_V2.xlsx"  # Replace with actual path
 sup1 = pd.read_excel(excel_file, sheet_name="Sup Table 1")
 sup13 = pd.read_excel(excel_file, sheet_name="Sup Table 13")
 
