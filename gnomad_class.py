@@ -21,7 +21,7 @@ Scoring:
       > 0.01% ( > 0.0001 )  => -4
       > 0.002% ( > 0.00002 ) and <= 0.01% => -1
       otherwise => 0
-  - Final = PM2 + BA1 + "Final Score (Alpha)" + "Capped Final Score"
+  - Final = PM2 + BA1 + "Alpha Missense - ACMG" + "Capped Final Score"
   - Only the columns PM2, BA1, Final are appended to the target sheets.
 """
 
@@ -215,7 +215,7 @@ def build_faf_map(gnomad_df: pd.DataFrame) -> dict:
 def score_sheet(df: pd.DataFrame, gene: str, faf_map: dict) -> pd.DataFrame:
     """
     Compute PM2 and BA1 from non-founder FAF95 and then:
-      Final = PM2 + BA1 + "Final Score (Alpha)" + "Capped Final Score"
+      Final = PM2 + BA1 + "Alpha Missense - ACMG" + "Capped Final Score"
 
     Only appends PM2, BA1, Final to the DataFrame (in this order).
     """
@@ -224,12 +224,12 @@ def score_sheet(df: pd.DataFrame, gene: str, faf_map: dict) -> pd.DataFrame:
         raise KeyError(f"Expected protein change column '{PROTEIN_CHANGE_COL}' not found in this sheet.")
 
     # Locate the two required pre-existing columns
-    alpha_col = resolve_exact_ci(df, "Final Score (Alpha)")
+    alpha_col = resolve_exact_ci(df, "Alpha Missense - ACMG")
     capped_col = resolve_exact_ci(df, "Capped Final Score")
     if alpha_col is None or capped_col is None:
         missing = []
         if alpha_col is None:
-            missing.append("'Final Score (Alpha)'")
+            missing.append("'Alpha Missense - ACMG'")
         if capped_col is None:
             missing.append("'Capped Final Score'")
         raise KeyError(f"Missing required column(s): {', '.join(missing)}")
