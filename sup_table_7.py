@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Dict, Tuple, Union
 
 import pandas as pd
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Font
 
 DATA_START_COL = "T8"
@@ -125,9 +125,15 @@ def write_sup_table_7(
     output_file = Path(output_path)
     output_file.parent.mkdir(parents=True, exist_ok=True)
 
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Sup Table 7"
+    if output_file.exists():
+        wb = load_workbook(output_file)
+        if "Sup Table 7" in wb.sheetnames:
+            wb.remove(wb["Sup Table 7"])
+        ws = wb.create_sheet("Sup Table 7")
+    else:
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Sup Table 7"
 
     ws["A1"] = (
         "Supplementary Table 7: Summary statistics for tested BRCA1 and BRCA2 variants "

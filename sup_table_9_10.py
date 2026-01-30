@@ -1,3 +1,4 @@
+import math
 from pathlib import Path
 from typing import Dict, List, Tuple
 
@@ -83,18 +84,32 @@ def _build_track_map(meta_df: pd.DataFrame) -> Dict[str, str]:
     return track_map
 
 
-def _wilson_score_interval(p: float, n: int, z: float = 1.96) -> Tuple[float, float]:
+Z_SCORE = 1.95996
+
+
+def _custom_ci(p: float, n: int, z: float) -> Tuple[float, float]:
     if n == 0:
         return 0.0, 0.0
-    denom = 1 + z**2 / n
-    center = (p + z**2 / (2 * n)) / denom
-    margin = z * ((p * (1 - p) / n) + (z**2 / (4 * n**2))) ** 0.5 / denom
-    return max(0.0, center - margin), min(1.0, center + margin)
+    q = 1 - p
+    z2 = z * z
+    denom = 2 * (n + z2)
+
+    inner_lower = z2 - 2 - (1 / n) + 4 * p * ((n * q) + 1)
+    inner_upper = z2 + 2 - (1 / n) + 4 * p * ((n * q) - 1)
+    inner_lower = max(inner_lower, 0.0)
+    inner_upper = max(inner_upper, 0.0)
+
+    numerador_lower = (2 * n * p) + z2 - 1 - (z * math.sqrt(inner_lower))
+    numerador_upper = (2 * n * p) + z2 + 1 + (z * math.sqrt(inner_upper))
+
+    lower = numerador_lower / denom
+    upper = numerador_upper / denom
+    return max(0.0, lower), min(1.0, upper)
 
 
 def _classify_odds(odds: float) -> str:
     if 0.0001 < odds < 0.0029:
-        return "BS3_very_strong"
+        return "BS3"
     if odds < 0.053:
         return "BS3"
     if odds < 0.23:
@@ -109,7 +124,7 @@ def _classify_odds(odds: float) -> str:
         return "PS3_moderate"
     if odds > 2.1:
         return "PS3_supporting"
-    return "indeterminate"
+    return "Indeterminate"
 
 
 def _safe_odds(p2: float, p1: float) -> float:
@@ -149,18 +164,19 @@ def build_track_rows(
         ben_ref = int((present & t6.isin([1, 2])).sum())
 
         vals_num = pd.to_numeric(col_vals, errors="coerce")
-        tp = int((vals_num.eq(2) & t6.isin([4, 5])).sum())
-        fn = int((vals_num.eq(0) & t6.isin([4, 5])).sum())
-        tn = int((vals_num.eq(0) & t6.isin([1, 2])).sum())
-        fp = int((vals_num.eq(2) & t6.isin([1, 2])).sum())
+        tested_mask = col_vals.notna()
+        tp = int((tested_mask & vals_num.eq(2) & t6.isin([4, 5])).sum())
+        fn = int((tested_mask & vals_num.isin([0, 1]) & t6.isin([4, 5])).sum())
+        tn = int((tested_mask & vals_num.eq(0) & t6.isin([1, 2])).sum())
+        fp = int((tested_mask & vals_num.isin([1, 2]) & t6.isin([1, 2])).sum())
 
         sens_denom = tp + fn
         sensitivity = 0.0 if sens_denom == 0 else tp / sens_denom
-        sens_low, sens_high = _wilson_score_interval(sensitivity, sens_denom)
+        sens_low, sens_high = _custom_ci(sensitivity, sens_denom, Z_SCORE)
 
         spec_denom = tn + fp
         specificity = 0.0 if spec_denom == 0 else tn / spec_denom
-        spec_low, spec_high = _wilson_score_interval(specificity, spec_denom)
+        spec_low, spec_high = _custom_ci(specificity, spec_denom, Z_SCORE)
 
         func_abnormal = int((vals_num.eq(2) & ref_mask).sum())
         ind_ref_path = int((vals_num.eq(1) & t6.isin([4, 5])).sum())

@@ -18,6 +18,7 @@ from sup_table_16 import (
 from sup_table_17 import write_sup_table_17
 
 FILE_PATH = "dataset/SUPP_TABLES_BRCA12_DEC_2025_WORKING_fixed.xlsx"
+OUTPUT_PATH = "results/code_generated.xlsx"
 
 SHEETS = {
     "Sup Table 1": "BRCA1_table",
@@ -27,6 +28,7 @@ SHEETS = {
     "Sup Table 5": "BRCA1_Reference_panel",
     "Sup Table 6": "BRCA2_Reference_panel",
 }
+
 
 
 def load_tables(path: str) -> dict:
@@ -95,23 +97,23 @@ if __name__ == "__main__":
     BRCA2_Reference_panel = tables["BRCA2_Reference_panel"]
 
     summary_7 = summarize_tables(BRCA1_table, BRCA2_table)
-    write_sup_table_7(summary_7, "results/code_generated.xlsx")
+    write_sup_table_7(summary_7, OUTPUT_PATH)
 
     summary_8 = summarize_tables_8(BRCA1_table, BRCA2_table)
-    write_sup_table_8(summary_8, "results/code_generated.xlsx")
+    write_sup_table_8(summary_8, OUTPUT_PATH)
 
     write_sup_table_9_10(
         BRCA1_table,
         BRCA1_metadata,
         BRCA2_table,
         BRCA2_metadata,
-        "results/code_generated.xlsx",
+        OUTPUT_PATH,
     )
 
     write_sup_table_11(
         BRCA1_table,
         BRCA2_table,
-        "results/code_generated.xlsx",
+        OUTPUT_PATH,
     )
 
     brca1_class_map = build_track_classification_map(BRCA1_table, BRCA1_metadata, 11009)
@@ -121,7 +123,7 @@ if __name__ == "__main__":
         BRCA2_table,
         brca1_class_map,
         brca2_class_map,
-        "results/code_generated.xlsx",
+        OUTPUT_PATH,
     )
 
     write_sup_table_14_15(
@@ -140,11 +142,11 @@ if __name__ == "__main__":
     brca2_assign = build_assignment_df(sup13_df)
     brca1_tbl = build_feature_table(brca1_assign, brca1_features)
     brca2_tbl = build_feature_table(brca2_assign, brca2_features)
-    write_sup_table_16(brca1_tbl, brca2_tbl, "results/code_generated.xlsx")
+    write_sup_table_16(brca1_tbl, brca2_tbl, OUTPUT_PATH)
 
     write_sup_table_17(
         FILE_PATH,
-        "results/code_generated.xlsx",
+        OUTPUT_PATH,
         sup12_sheet="Sup Table 12",
         sup13_sheet="Sup Table 13",
     )
@@ -154,7 +156,7 @@ if __name__ == "__main__":
         sup13_df,
         "dataset/AlphaMissense_Calculations_all.xlsx",
         "dataset/ACMG_other_points.xlsx",
-        "results/code_generated.xlsx",
+        OUTPUT_PATH,
     )
 
     print("Sup Table 7, Sup Table 8, Sup Table 9, Sup Table 10, Sup Table 11, Sup Table 12, Sup Table 13, Sup Table 14, Sup Table 15, and Sup Table 16 written to results/code_generated.xlsx")
