@@ -13,6 +13,7 @@ DOCUMENTED_COL = "T7"
 
 BRCA1_TOTAL_MISSENSE = 11009
 BRCA2_TOTAL_MISSENSE = 20169
+EXCLUDED_T6_VARIANTS = {"p.M1I", "p.M1K", "p.M1R", "p.M1T", "p.M1V"}
 
 
 def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -21,7 +22,59 @@ def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def _get_data_block(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
+def _resolve_track_col(meta_df: pd.DataFrame) -> str:
+    meta_df = _normalize_columns(meta_df)
+    norm_map = {str(c).strip().lower(): c for c in meta_df.columns}
+    candidates = [
+        "track #",
+        "track#",
+        "track number",
+        "track no",
+        "track id",
+        "track",
+    ]
+    for c in candidates:
+        if c in norm_map:
+            return norm_map[c]
+    return meta_df.columns[0]
+
+
+def _track_whitelist(meta_df: pd.DataFrame) -> set[str]:
+    if meta_df is None or meta_df.empty:
+        return set()
+    track_col = _resolve_track_col(meta_df)
+    whitelist: set[str] = set()
+    for val in meta_df[track_col].dropna():
+        track_raw = str(val).strip()
+        if not track_raw or track_raw.lower() == "nan":
+            continue
+        if track_raw.startswith("T"):
+            whitelist.add(track_raw)
+        else:
+            whitelist.add(f"T{track_raw}")
+    return whitelist
+
+
+def _filter_data_cols(data_df: pd.DataFrame, meta_df: pd.DataFrame | None) -> pd.DataFrame:
+    whitelist = _track_whitelist(meta_df)
+    if not whitelist:
+        return data_df
+    keep = [c for c in data_df.columns if str(c).strip() in whitelist]
+    return data_df[keep]
+
+
+def _norm_t6(series: pd.Series) -> pd.Series:
+    def _norm(val: object) -> str:
+        if pd.isna(val):
+            return ""
+        s = str(val).strip().replace(" ", "")
+        if s.endswith(".0"):
+            s = s[:-2]
+        return s
+    return series.map(_norm)
+
+
+def _get_data_block(df: pd.DataFrame, meta_df: pd.DataFrame | None = None) -> Tuple[pd.DataFrame, pd.DataFrame]:
     df = _normalize_columns(df)
     if DATA_START_COL not in df.columns:
         raise KeyError(f"Missing data start column: {DATA_START_COL}")
@@ -31,6 +84,7 @@ def _get_data_block(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
         raise KeyError(f"Missing documented column: {DOCUMENTED_COL}")
     start_idx = df.columns.get_loc(DATA_START_COL)
     data_df = df.iloc[:, start_idx:]
+    data_df = _filter_data_cols(data_df, meta_df)
     return df, data_df
 
 
@@ -135,15 +189,23 @@ def _safe_odds(p2: float, p1: float) -> float:
 
 
 def build_track_rows(
-    brca_table: pd.DataFrame, metadata: pd.DataFrame, total_missense: int
+    brca_table: pd.DataFrame,
+    metadata: pd.DataFrame,
+    total_missense: int,
 ) -> List[List]:
-    df, data_df = _get_data_block(brca_table)
+    df, data_df = _get_data_block(brca_table, metadata)
     track_map = _build_track_map(metadata)
     track_cols = list(data_df.columns)
 
-    t6 = pd.to_numeric(df[REFERENCE_COL], errors="coerce")
+    t6_clean = _norm_t6(df[REFERENCE_COL])
+    if "T5" in df.columns:
+        mask = df["T5"].astype(str).str.strip().isin(EXCLUDED_T6_VARIANTS)
+        if mask.any():
+            t6_clean = t6_clean.mask(mask, "")
     t7 = pd.to_numeric(df[DOCUMENTED_COL], errors="coerce")
-    ref_mask = t6.notna()
+    ref_mask = t6_clean.ne("")
+    path_mask = t6_clean.isin({"4", "5", "4;5"})
+    ben_mask = t6_clean.isin({"1", "2", "1;2"})
     documented_total = int(t7.eq(1).sum())
 
     rows = []
@@ -160,15 +222,15 @@ def build_track_rows(
         doc_pct = 0.0 if tested_count == 0 else round((documented_classified / tested_count) * 100, 2)
 
         total_ref = int((present & ref_mask).sum())
-        path_ref = int((present & t6.isin([4, 5])).sum())
-        ben_ref = int((present & t6.isin([1, 2])).sum())
+        path_ref = int((present & path_mask).sum())
+        ben_ref = int((present & ben_mask).sum())
 
         vals_num = pd.to_numeric(col_vals, errors="coerce")
         tested_mask = col_vals.notna()
-        tp = int((tested_mask & vals_num.eq(2) & t6.isin([4, 5])).sum())
-        fn = int((tested_mask & vals_num.isin([0, 1]) & t6.isin([4, 5])).sum())
-        tn = int((tested_mask & vals_num.eq(0) & t6.isin([1, 2])).sum())
-        fp = int((tested_mask & vals_num.isin([1, 2]) & t6.isin([1, 2])).sum())
+        tp = int((tested_mask & vals_num.eq(2) & path_mask).sum())
+        fn = int((tested_mask & vals_num.isin([0, 1]) & path_mask).sum())
+        tn = int((tested_mask & vals_num.eq(0) & ben_mask).sum())
+        fp = int((tested_mask & vals_num.isin([1, 2]) & ben_mask).sum())
 
         sens_denom = tp + fn
         sensitivity = 0.0 if sens_denom == 0 else tp / sens_denom
@@ -179,8 +241,8 @@ def build_track_rows(
         spec_low, spec_high = _custom_ci(specificity, spec_denom, Z_SCORE)
 
         func_abnormal = int((vals_num.eq(2) & ref_mask).sum())
-        ind_ref_path = int((vals_num.eq(1) & t6.isin([4, 5])).sum())
-        ind_ref_benign = int((vals_num.eq(1) & t6.isin([1, 2])).sum())
+        ind_ref_path = int((vals_num.eq(1) & path_mask).sum())
+        ind_ref_benign = int((vals_num.eq(1) & ben_mask).sum())
         func_normal = int((vals_num.eq(0) & ref_mask).sum())
 
         p1_denom = tp + tn + fp + fn
@@ -233,7 +295,9 @@ def build_track_rows(
 
 
 def build_track_classification_map(
-    brca_table: pd.DataFrame, metadata: pd.DataFrame, total_missense: int
+    brca_table: pd.DataFrame,
+    metadata: pd.DataFrame,
+    total_missense: int,
 ) -> Dict[str, Dict[str, str]]:
     rows = build_track_rows(brca_table, metadata, total_missense)
     class_map: Dict[str, Dict[str, str]] = {}
@@ -366,6 +430,23 @@ def write_sup_table(
                 cell.alignment = Alignment(horizontal="center", vertical="center", textRotation=90, wrap_text=True)
             else:
                 cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    # Post-process ACMG strength columns:
+    # - Column Y (Path): if any BS3 appears, mark as Indeterminate* in red
+    # - Column Z (Benign): if any PS3 appears, mark as Indeterminate* in red
+    red_font = Font(name="Arial", size=10, bold=False, color="FF0000")
+    for r in range(start_row, start_row + len(rows)):
+        cell_y = ws[f"Y{r}"]
+        val_y = "" if cell_y.value is None else str(cell_y.value)
+        if "BS3" in val_y:
+            cell_y.value = "Indeterminate*"
+            cell_y.font = red_font
+
+        cell_z = ws[f"Z{r}"]
+        val_z = "" if cell_z.value is None else str(cell_z.value)
+        if "PS3" in val_z:
+            cell_z.value = "Indeterminate*"
+            cell_z.font = red_font
 
     for col_letter in ("A", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"):
         ws.column_dimensions[col_letter].width = 14

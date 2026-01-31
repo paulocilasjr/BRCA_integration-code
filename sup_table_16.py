@@ -72,6 +72,7 @@ OUTPUT_COLS = [
     "Hypo observations frequency",
     "Frequency of variants with functional impact",
 ]
+EXCLUDED_T6_VARIANTS = {"p.M1I", "p.M1K", "p.M1R", "p.M1T", "p.M1V"}
 
 
 def _norm_col(c: str) -> str:
@@ -90,6 +91,15 @@ def _find_col(df: pd.DataFrame, candidates: Iterable[str]) -> str:
             if key in k_norm:
                 return k_orig
     raise KeyError(f"Could not find any of columns: {list(candidates)}")
+
+
+def _mask_t6_by_variant(df: pd.DataFrame, t5_col: str, t6_col: str) -> pd.DataFrame:
+    mask = df[t5_col].astype(str).str.strip().isin(EXCLUDED_T6_VARIANTS)
+    if not mask.any():
+        return df
+    df = df.copy()
+    df.loc[mask, t6_col] = pd.NA
+    return df
 
 
 def resolve_sheet_name(xlsx_path: str, preferred: str, fallbacks: List[str]) -> str:
@@ -169,6 +179,7 @@ def build_vus_universe(variant_df: pd.DataFrame, ref_df: pd.DataFrame) -> pd.Dat
 
     ref_variants = set(ref_df[ref_t5].dropna().astype(str).tolist())
     base = variant_df[[col_t5, col_t6, col_t3]].dropna(subset=[col_t5]).copy()
+    base = _mask_t6_by_variant(base, col_t5, col_t6)
     base[col_t5] = base[col_t5].astype(str)
     vus = base[base[col_t6].isna()].copy()
     vus = vus[~vus[col_t5].isin(ref_variants)]
@@ -215,6 +226,7 @@ def build_assignment_df(sup_df: pd.DataFrame) -> pd.DataFrame:
     col_criteria = _find_col(sup_df, ["Integrated ACMG evidence criteria"])
 
     df = sup_df[[col_t5, col_t3, col_t6, col_criteria, col_hypo]].dropna(subset=[col_t5]).copy()
+    df = _mask_t6_by_variant(df, col_t5, col_t6)
     df = df.rename(
         columns={
             col_t5: "T5",

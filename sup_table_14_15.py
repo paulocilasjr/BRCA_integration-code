@@ -40,6 +40,7 @@ PANEL3_RED = {"PQ", "YH", "VE", "AD", "MT", "SI"}
 PANEL3_BLUE = {"LI", "LR"}
 PANEL4_RED = {"TM", "LS", "MI", "SF", "ND", "GS", "KR", "LW"}
 DATA_START_ROW = 4
+EXCLUDED_T6_VARIANTS = {"p.M1I", "p.M1K", "p.M1R", "p.M1T", "p.M1V"}
 
 
 def _norm_col(c: str) -> str:
@@ -58,6 +59,39 @@ def _find_col(df: pd.DataFrame, candidates: Iterable[str]) -> str:
             if key in k_norm:
                 return k_orig
     raise KeyError(f"Could not find any of columns: {list(candidates)}")
+
+
+def _mask_t6_by_variant(df: pd.DataFrame, t5_col: str, t6_col: str) -> pd.DataFrame:
+    mask = df[t5_col].astype(str).str.strip().isin(EXCLUDED_T6_VARIANTS)
+    if not mask.any():
+        return df
+    df = df.copy()
+    df.loc[mask, t6_col] = pd.NA
+    return df
+
+
+def _find_include_col(df: pd.DataFrame) -> str | None:
+    try:
+        return _find_col(df, ["Include in Ref Panel", "Include in Reference Panel"])
+    except KeyError:
+        for col in df.columns:
+            norm = _norm_col(col)
+            if "include" in norm and "ref panel" in norm:
+                return col
+    return None
+
+
+def _ref_variants_from_panel(df: pd.DataFrame) -> set[str]:
+    ref_col = None
+    try:
+        ref_col = _find_col(df, ["T5", "Variant", "Variant ID", "variant", "variant id", "T5 (Variant)"])
+    except KeyError:
+        ref_col = str(df.columns[0])
+    include_col = _find_include_col(df)
+    if include_col:
+        include_vals = df[include_col].astype(str).str.strip().str.lower()
+        df = df.loc[~include_vals.eq("no")].copy()
+    return set(df[ref_col].dropna().astype(str).tolist())
 
 
 def _extract_code(var: str) -> Optional[str]:
@@ -101,6 +135,7 @@ def _panel_data_from_sup12(
     col_t6_1 = _find_col(brca_table, ["T6"])
     sup1_min = brca_table[[col_t5_1, col_t6_1]].dropna(subset=[col_t5_1]).copy()
     sup1_min[col_t5_1] = sup1_min[col_t5_1].astype(str)
+    sup1_min = _mask_t6_by_variant(sup1_min, col_t5_1, col_t6_1)
     vus_sup1 = sup1_min[sup1_min[col_t6_1].isna()].copy()
     vus_sup1 = vus_sup1[~vus_sup1[col_t5_1].isin(ref_variants)]
     vus_variants = set(vus_sup1[col_t5_1].tolist())
@@ -387,16 +422,8 @@ def write_sup_table_14_15(
     sup13_df: pd.DataFrame,
     output_path: str,
 ) -> None:
-    def _ref_col(df: pd.DataFrame) -> str:
-        try:
-            return _find_col(df, ["T5", "Variant", "Variant ID", "variant", "variant id", "T5 (Variant)"])
-        except KeyError:
-            return str(df.columns[0])
-
-    ref_col_b1 = _ref_col(brca1_ref_panel)
-    ref_col_b2 = _ref_col(brca2_ref_panel)
-    ref_brca1 = set(brca1_ref_panel[ref_col_b1].dropna().astype(str).tolist())
-    ref_brca2 = set(brca2_ref_panel[ref_col_b2].dropna().astype(str).tolist())
+    ref_brca1 = _ref_variants_from_panel(brca1_ref_panel)
+    ref_brca2 = _ref_variants_from_panel(brca2_ref_panel)
 
     panel_brca1 = _panel_data_from_sup12(brca1_table, sup12_df, ref_brca1)
     panel_brca2 = _panel_data_from_sup12(brca2_table, sup13_df, ref_brca2)

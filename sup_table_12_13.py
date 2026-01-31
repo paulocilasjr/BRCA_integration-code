@@ -25,12 +25,54 @@ def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def _get_data_block(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
+def _resolve_track_col(meta_df: pd.DataFrame) -> str:
+    meta_df = _normalize_columns(meta_df)
+    norm_map = {str(c).strip().lower(): c for c in meta_df.columns}
+    candidates = [
+        "track #",
+        "track#",
+        "track number",
+        "track no",
+        "track id",
+        "track",
+    ]
+    for c in candidates:
+        if c in norm_map:
+            return norm_map[c]
+    return meta_df.columns[0]
+
+
+def _track_whitelist(meta_df: pd.DataFrame) -> set[str]:
+    if meta_df is None or meta_df.empty:
+        return set()
+    track_col = _resolve_track_col(meta_df)
+    whitelist: set[str] = set()
+    for val in meta_df[track_col].dropna():
+        track_raw = str(val).strip()
+        if not track_raw or track_raw.lower() == "nan":
+            continue
+        if track_raw.startswith("T"):
+            whitelist.add(track_raw)
+        else:
+            whitelist.add(f"T{track_raw}")
+    return whitelist
+
+
+def _filter_data_cols(data_df: pd.DataFrame, meta_df: pd.DataFrame | None) -> pd.DataFrame:
+    whitelist = _track_whitelist(meta_df)
+    if not whitelist:
+        return data_df
+    keep = [c for c in data_df.columns if str(c).strip() in whitelist]
+    return data_df[keep]
+
+
+def _get_data_block(df: pd.DataFrame, meta_df: pd.DataFrame | None = None) -> Tuple[pd.DataFrame, pd.DataFrame]:
     df = _normalize_columns(df)
     if DATA_START_COL not in df.columns:
         raise KeyError(f"Missing data start column: {DATA_START_COL}")
     start_idx = df.columns.get_loc(DATA_START_COL)
     data_df = df.iloc[:, start_idx:]
+    data_df = _filter_data_cols(data_df, meta_df)
     return df, data_df
 
 
@@ -154,9 +196,9 @@ def _check_discordance(array: List[str]) -> Tuple[str, str, str, str, str]:
 
 
 def _build_output(
-    brca_table: pd.DataFrame, class_map: Dict[str, Dict[str, str]]
+    brca_table: pd.DataFrame, class_map: Dict[str, Dict[str, str]], meta_df: pd.DataFrame | None = None
 ) -> pd.DataFrame:
-    df, data_df = _get_data_block(brca_table)
+    df, data_df = _get_data_block(brca_table, meta_df)
 
     out: Dict[int, List[str]] = {}
     for col in data_df.columns:
@@ -302,9 +344,11 @@ def write_sup_table_12_13(
     brca1_class_map: Dict[str, Dict[str, str]],
     brca2_class_map: Dict[str, Dict[str, str]],
     output_path: str,
+    brca1_metadata: pd.DataFrame | None = None,
+    brca2_metadata: pd.DataFrame | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    df1 = _build_output(brca1_table, brca1_class_map)
-    df2 = _build_output(brca2_table, brca2_class_map)
+    df1 = _build_output(brca1_table, brca1_class_map, meta_df=brca1_metadata)
+    df2 = _build_output(brca2_table, brca2_class_map, meta_df=brca2_metadata)
 
     _write_sheet(
         df1,

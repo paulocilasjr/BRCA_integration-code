@@ -10,6 +10,7 @@ REFERENCE_COL = "T6"
 DOCUMENTED_COL = "T7"
 CUTOFFS = [1, 2, 10, 15, 20, 25, 30, 35, 40]
 VUS_CUTOFFS = [1, 2, 5, 10, 15, 20]
+EXCLUDED_T6_VARIANTS = {"p.M1I", "p.M1K", "p.M1R", "p.M1T", "p.M1V"}
 
 
 def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -18,7 +19,59 @@ def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def _get_data_block(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
+def _mask_t6_by_variant(df: pd.DataFrame) -> pd.DataFrame:
+    df = _normalize_columns(df)
+    if "T5" not in df.columns or REFERENCE_COL not in df.columns:
+        return df
+    mask = df["T5"].astype(str).str.strip().isin(EXCLUDED_T6_VARIANTS)
+    if mask.any():
+        df = df.copy()
+        df.loc[mask, REFERENCE_COL] = pd.NA
+    return df
+
+
+def _resolve_track_col(meta_df: pd.DataFrame) -> str:
+    meta_df = _normalize_columns(meta_df)
+    norm_map = {str(c).strip().lower(): c for c in meta_df.columns}
+    candidates = [
+        "track #",
+        "track#",
+        "track number",
+        "track no",
+        "track id",
+        "track",
+    ]
+    for c in candidates:
+        if c in norm_map:
+            return norm_map[c]
+    return meta_df.columns[0]
+
+
+def _track_whitelist(meta_df: pd.DataFrame) -> set[str]:
+    if meta_df is None or meta_df.empty:
+        return set()
+    track_col = _resolve_track_col(meta_df)
+    whitelist: set[str] = set()
+    for val in meta_df[track_col].dropna():
+        track_raw = str(val).strip()
+        if not track_raw or track_raw.lower() == "nan":
+            continue
+        if track_raw.startswith("T"):
+            whitelist.add(track_raw)
+        else:
+            whitelist.add(f"T{track_raw}")
+    return whitelist
+
+
+def _filter_data_cols(data_df: pd.DataFrame, meta_df: pd.DataFrame | None) -> pd.DataFrame:
+    whitelist = _track_whitelist(meta_df)
+    if not whitelist:
+        return data_df
+    keep = [c for c in data_df.columns if str(c).strip() in whitelist]
+    return data_df[keep]
+
+
+def _get_data_block(df: pd.DataFrame, meta_df: pd.DataFrame | None = None) -> Tuple[pd.DataFrame, pd.DataFrame]:
     df = _normalize_columns(df)
     if DATA_START_COL not in df.columns:
         raise KeyError(f"Missing data start column: {DATA_START_COL}")
@@ -28,6 +81,7 @@ def _get_data_block(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
         raise KeyError(f"Missing documented column: {DOCUMENTED_COL}")
     start_idx = df.columns.get_loc(DATA_START_COL)
     data_df = df.iloc[:, start_idx:]
+    data_df = _filter_data_cols(data_df, meta_df)
     return df, data_df
 
 
@@ -35,37 +89,37 @@ def _clean_reference_col(series: pd.Series) -> pd.Series:
     return series.replace(r"^\s*$", pd.NA, regex=True)
 
 
-def _row_data_counts(df: pd.DataFrame) -> pd.Series:
-    _, data_df = _get_data_block(df)
+def _row_data_counts(df: pd.DataFrame, meta_df: pd.DataFrame | None = None) -> pd.Series:
+    _, data_df = _get_data_block(df, meta_df)
     return data_df.notna().sum(axis=1)
 
 
-def total_data_points(df: pd.DataFrame) -> int:
-    return int(_row_data_counts(df).sum())
+def total_data_points(df: pd.DataFrame, meta_df: pd.DataFrame | None = None) -> int:
+    return int(_row_data_counts(df, meta_df).sum())
 
 
-def total_variants_tested(df: pd.DataFrame) -> int:
-    return int(_row_data_counts(df).gt(0).sum())
+def total_variants_tested(df: pd.DataFrame, meta_df: pd.DataFrame | None = None) -> int:
+    return int(_row_data_counts(df, meta_df).gt(0).sum())
 
 
-def total_vus_variants_tested(df: pd.DataFrame) -> int:
-    df = _normalize_columns(df)
-    tested = _row_data_counts(df).gt(0)
+def total_vus_variants_tested(df: pd.DataFrame, meta_df: pd.DataFrame | None = None) -> int:
+    df = _mask_t6_by_variant(df)
+    tested = _row_data_counts(df, meta_df).gt(0)
     t6 = _clean_reference_col(df[REFERENCE_COL])
     documented = pd.to_numeric(df[DOCUMENTED_COL], errors="coerce").fillna(0).eq(1)
     return int((tested & t6.isna() & documented).sum())
 
 
-def total_reference_variants_tested(df: pd.DataFrame) -> int:
-    df = _normalize_columns(df)
-    tested = _row_data_counts(df).gt(0)
+def total_reference_variants_tested(df: pd.DataFrame, meta_df: pd.DataFrame | None = None) -> int:
+    df = _mask_t6_by_variant(df)
+    tested = _row_data_counts(df, meta_df).gt(0)
     t6 = _clean_reference_col(df[REFERENCE_COL])
     return int((tested & t6.notna()).sum())
 
 
-def summarize_table(df: pd.DataFrame) -> Dict[str, Union[int, Dict[int, int]]]:
-    df = _normalize_columns(df)
-    data_counts = _row_data_counts(df)
+def summarize_table(df: pd.DataFrame, meta_df: pd.DataFrame | None = None) -> Dict[str, Union[int, Dict[int, int]]]:
+    df = _mask_t6_by_variant(df)
+    data_counts = _row_data_counts(df, meta_df)
     total_rows = int(len(df))
     t7 = pd.to_numeric(df[DOCUMENTED_COL], errors="coerce").fillna(0)
     reported = t7.eq(1)
@@ -95,8 +149,8 @@ def summarize_table(df: pd.DataFrame) -> Dict[str, Union[int, Dict[int, int]]]:
         "tested_ge": tested_ge,
         "total_data_points": int(data_counts.sum()),
         "total_variants_tested": int(data_counts.gt(0).sum()),
-        "total_vus_variants_tested": total_vus_variants_tested(df),
-        "total_reference_variants_tested": total_reference_variants_tested(df),
+        "total_vus_variants_tested": total_vus_variants_tested(df, meta_df),
+        "total_reference_variants_tested": total_reference_variants_tested(df, meta_df),
         "reported_total": reported_total,
         "reported_tested": reported_tested,
         "reported_vus_tested": reported_vus_tested,
@@ -110,11 +164,14 @@ def summarize_table(df: pd.DataFrame) -> Dict[str, Union[int, Dict[int, int]]]:
 
 
 def summarize_tables(
-    brca1_table: pd.DataFrame, brca2_table: pd.DataFrame
+    brca1_table: pd.DataFrame,
+    brca2_table: pd.DataFrame,
+    brca1_metadata: pd.DataFrame | None = None,
+    brca2_metadata: pd.DataFrame | None = None,
 ) -> Dict[str, Dict[str, Union[int, Dict[int, int]]]]:
     return {
-        "BRCA1": summarize_table(brca1_table),
-        "BRCA2": summarize_table(brca2_table),
+        "BRCA1": summarize_table(brca1_table, brca1_metadata),
+        "BRCA2": summarize_table(brca2_table, brca2_metadata),
     }
 
 

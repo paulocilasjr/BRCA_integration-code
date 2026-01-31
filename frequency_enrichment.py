@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-import sys
-import re
-import pandas as pd
-
+import sys
+import re
+import pandas as pd
+
+EXCLUDED_T6_VARIANTS = {"p.M1I", "p.M1K", "p.M1R", "p.M1T", "p.M1V"}
+
 def extract_code(var):
     """
     From a string like "p.A123T" return "AT" (original aa + mutant aa).
@@ -45,11 +47,14 @@ def main(path):
                    - hypo_vars)
     all_vars    = set(sup13["T5"])
 
-    # 2) Load Sup Table 1, skip first junk row, pick only T5 and T6
-    sup1 = pd.read_excel(path, sheet_name="Sup Table 2", header=1)
-    sup1 = sup1[["T5", "T6"]]
-
-    # keep only variants in our classification table…
+    # 2) Load Sup Table 1, skip first junk row, pick only T5 and T6
+    sup1 = pd.read_excel(path, sheet_name="Sup Table 2", header=1)
+    sup1 = sup1[["T5", "T6"]]
+    mask = sup1["T5"].astype(str).str.strip().isin(EXCLUDED_T6_VARIANTS)
+    if mask.any():
+        sup1.loc[mask, "T6"] = pd.NA
+
+    # keep only variants in our classification table…
     sup1 = sup1[sup1["T5"].isin(all_vars)]
     # …and drop any that have a non‐empty T6
     vus  = sup1[sup1["T6"].isna()]

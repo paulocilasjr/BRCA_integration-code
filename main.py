@@ -29,12 +29,66 @@ SHEETS = {
     "Sup Table 6": "BRCA2_Reference_panel",
 }
 
+def _norm_col(text: object) -> str:
+    return " ".join(str(text).strip().lower().split())
+
+
+def _find_ref_variant_col(df: pd.DataFrame) -> str:
+    candidates = ["T5", "Variant", "Variant ID", "variant", "variant id", "T5 (Variant)"]
+    mapping = {_norm_col(c): c for c in df.columns}
+    for cand in candidates:
+        key = _norm_col(cand)
+        if key in mapping:
+            return mapping[key]
+    return str(df.columns[0])
+
+
+def _find_include_col(df: pd.DataFrame) -> str | None:
+    target = _norm_col("Include in Ref Panel")
+    mapping = {_norm_col(c): c for c in df.columns}
+    if target in mapping:
+        return mapping[target]
+    # fallback: any column containing both "include" and "ref panel"
+    for col in df.columns:
+        norm = _norm_col(col)
+        if "include" in norm and "ref panel" in norm:
+            return col
+    return None
+
+
+def _excluded_variants_from_ref_panel(df: pd.DataFrame) -> set[str]:
+    include_col = _find_include_col(df)
+    if not include_col:
+        return set()
+    var_col = _find_ref_variant_col(df)
+    include_vals = df[include_col].astype(str).str.strip().str.lower()
+    excluded = df.loc[include_vals.eq("no"), var_col].dropna().astype(str).str.strip()
+    return set(excluded.tolist())
+
+
+def _mask_t6_for_excluded_variants(variant_df: pd.DataFrame, excluded: set[str]) -> pd.DataFrame:
+    if not excluded or "T5" not in variant_df.columns or "T6" not in variant_df.columns:
+        return variant_df
+    df = variant_df.copy()
+    t5_vals = df["T5"].astype(str).str.strip()
+    mask = t5_vals.isin(excluded)
+    if mask.any():
+        df.loc[mask, "T6"] = pd.NA
+    return df
+
 
 
 def load_tables(path: str) -> dict:
     tables = {}
     for sheet_name, var_name in SHEETS.items():
         tables[var_name] = pd.read_excel(path, sheet_name=sheet_name, header=1)
+    # Apply ref-panel include/exclude mapping to T6 in Sup Table 1/2.
+    if "BRCA1_Reference_panel" in tables and "BRCA1_table" in tables:
+        excluded_b1 = _excluded_variants_from_ref_panel(tables["BRCA1_Reference_panel"])
+        tables["BRCA1_table"] = _mask_t6_for_excluded_variants(tables["BRCA1_table"], excluded_b1)
+    if "BRCA2_Reference_panel" in tables and "BRCA2_table" in tables:
+        excluded_b2 = _excluded_variants_from_ref_panel(tables["BRCA2_Reference_panel"])
+        tables["BRCA2_table"] = _mask_t6_for_excluded_variants(tables["BRCA2_table"], excluded_b2)
     return tables
 
 
@@ -96,10 +150,10 @@ if __name__ == "__main__":
     BRCA1_Reference_panel = tables["BRCA1_Reference_panel"]
     BRCA2_Reference_panel = tables["BRCA2_Reference_panel"]
 
-    summary_7 = summarize_tables(BRCA1_table, BRCA2_table)
+    summary_7 = summarize_tables(BRCA1_table, BRCA2_table, BRCA1_metadata, BRCA2_metadata)
     write_sup_table_7(summary_7, OUTPUT_PATH)
 
-    summary_8 = summarize_tables_8(BRCA1_table, BRCA2_table)
+    summary_8 = summarize_tables_8(BRCA1_table, BRCA2_table, BRCA1_metadata, BRCA2_metadata)
     write_sup_table_8(summary_8, OUTPUT_PATH)
 
     write_sup_table_9_10(
@@ -114,6 +168,8 @@ if __name__ == "__main__":
         BRCA1_table,
         BRCA2_table,
         OUTPUT_PATH,
+        BRCA1_metadata,
+        BRCA2_metadata,
     )
 
     brca1_class_map = build_track_classification_map(BRCA1_table, BRCA1_metadata, 11009)
@@ -124,6 +180,8 @@ if __name__ == "__main__":
         brca1_class_map,
         brca2_class_map,
         OUTPUT_PATH,
+        BRCA1_metadata,
+        BRCA2_metadata,
     )
 
     write_sup_table_14_15(

@@ -10,6 +10,7 @@ REFERENCE_COL = "T6"
 
 THROUGHPUT_CUTOFFS = [5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 200, 300, 400, 500, 1000, 1500]
 REF_PANEL_CUTOFFS = [2, 3, 4, 5, 10]
+EXCLUDED_T6_VARIANTS = {"p.M1I", "p.M1K", "p.M1R", "p.M1T", "p.M1V"}
 
 
 def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -18,7 +19,59 @@ def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def _get_data_block(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
+def _norm_t6(series: pd.Series) -> pd.Series:
+    def _norm(val: object) -> str:
+        if pd.isna(val):
+            return ""
+        s = str(val).strip().replace(" ", "")
+        if s.endswith(".0"):
+            s = s[:-2]
+        return s
+    return series.map(_norm)
+
+
+def _resolve_track_col(meta_df: pd.DataFrame) -> str:
+    meta_df = _normalize_columns(meta_df)
+    norm_map = {str(c).strip().lower(): c for c in meta_df.columns}
+    candidates = [
+        "track #",
+        "track#",
+        "track number",
+        "track no",
+        "track id",
+        "track",
+    ]
+    for c in candidates:
+        if c in norm_map:
+            return norm_map[c]
+    return meta_df.columns[0]
+
+
+def _track_whitelist(meta_df: pd.DataFrame) -> set[str]:
+    if meta_df is None or meta_df.empty:
+        return set()
+    track_col = _resolve_track_col(meta_df)
+    whitelist: set[str] = set()
+    for val in meta_df[track_col].dropna():
+        track_raw = str(val).strip()
+        if not track_raw or track_raw.lower() == "nan":
+            continue
+        if track_raw.startswith("T"):
+            whitelist.add(track_raw)
+        else:
+            whitelist.add(f"T{track_raw}")
+    return whitelist
+
+
+def _filter_data_cols(data_df: pd.DataFrame, meta_df: pd.DataFrame | None) -> pd.DataFrame:
+    whitelist = _track_whitelist(meta_df)
+    if not whitelist:
+        return data_df
+    keep = [c for c in data_df.columns if str(c).strip() in whitelist]
+    return data_df[keep]
+
+
+def _get_data_block(df: pd.DataFrame, meta_df: pd.DataFrame | None = None) -> Tuple[pd.DataFrame, pd.DataFrame]:
     df = _normalize_columns(df)
     if DATA_START_COL not in df.columns:
         raise KeyError(f"Missing data start column: {DATA_START_COL}")
@@ -26,32 +79,37 @@ def _get_data_block(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
         raise KeyError(f"Missing reference column: {REFERENCE_COL}")
     start_idx = df.columns.get_loc(DATA_START_COL)
     data_df = df.iloc[:, start_idx:]
+    data_df = _filter_data_cols(data_df, meta_df)
     return df, data_df
 
 
-def _track_counts(df: pd.DataFrame) -> pd.Series:
-    _, data_df = _get_data_block(df)
+def _track_counts(df: pd.DataFrame, meta_df: pd.DataFrame | None = None) -> pd.Series:
+    _, data_df = _get_data_block(df, meta_df)
     return data_df.notna().sum(axis=0)
 
 
-def _reference_counts(df: pd.DataFrame) -> Tuple[pd.Series, pd.Series]:
-    df, data_df = _get_data_block(df)
-    t6 = pd.to_numeric(df[REFERENCE_COL], errors="coerce")
-    non_path_mask = t6.isin([1, 2])
-    path_mask = t6.isin([4, 5])
+def _reference_counts(df: pd.DataFrame, meta_df: pd.DataFrame | None = None) -> Tuple[pd.Series, pd.Series]:
+    df, data_df = _get_data_block(df, meta_df)
+    t6_clean = _norm_t6(df[REFERENCE_COL])
+    if "T5" in df.columns:
+        mask = df["T5"].astype(str).str.strip().isin(EXCLUDED_T6_VARIANTS)
+        if mask.any():
+            t6_clean = t6_clean.mask(mask, "")
+    non_path_mask = t6_clean.isin({"1", "2", "1;2"})
+    path_mask = t6_clean.isin({"4", "5", "4;5"})
     non_path_counts = data_df.loc[non_path_mask].notna().sum(axis=0)
     path_counts = data_df.loc[path_mask].notna().sum(axis=0)
     return non_path_counts, path_counts
 
 
-def summarize_table(df: pd.DataFrame) -> Dict[str, Union[int, Dict[int, int]]]:
+def summarize_table(df: pd.DataFrame, meta_df: pd.DataFrame | None = None) -> Dict[str, Union[int, Dict[int, int]]]:
     df = _normalize_columns(df)
-    total_counts = _track_counts(df)
+    total_counts = _track_counts(df, meta_df)
     total_tracks = int(len(total_counts))
     tracks_lt_5 = int((total_counts < 5).sum())
     tracks_ge = {cutoff: int((total_counts >= cutoff).sum()) for cutoff in THROUGHPUT_CUTOFFS}
 
-    non_path_counts, path_counts = _reference_counts(df)
+    non_path_counts, path_counts = _reference_counts(df, meta_df)
     ref_panel_ge = {
         cutoff: int(((non_path_counts >= cutoff) & (path_counts >= cutoff)).sum())
         for cutoff in REF_PANEL_CUTOFFS
@@ -77,11 +135,14 @@ def summarize_table(df: pd.DataFrame) -> Dict[str, Union[int, Dict[int, int]]]:
 
 
 def summarize_tables(
-    brca1_table: pd.DataFrame, brca2_table: pd.DataFrame
+    brca1_table: pd.DataFrame,
+    brca2_table: pd.DataFrame,
+    brca1_metadata: pd.DataFrame | None = None,
+    brca2_metadata: pd.DataFrame | None = None,
 ) -> Dict[str, Dict[str, Union[int, Dict[int, int]]]]:
     return {
-        "BRCA1": summarize_table(brca1_table),
-        "BRCA2": summarize_table(brca2_table),
+        "BRCA1": summarize_table(brca1_table, brca1_metadata),
+        "BRCA2": summarize_table(brca2_table, brca2_metadata),
     }
 
 

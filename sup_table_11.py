@@ -9,12 +9,76 @@ from sklearn.model_selection import KFold
 
 DATA_START_COL = "T8"
 REFERENCE_COL = "T6"
+EXCLUDED_T6_VARIANTS = {"p.M1I", "p.M1K", "p.M1R", "p.M1T", "p.M1V"}
 
 
 def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
     out.columns = out.columns.astype(str).str.strip()
     return out
+
+
+def _resolve_track_col(meta_df: pd.DataFrame) -> str:
+    meta_df = _normalize_columns(meta_df)
+    norm_map = {str(c).strip().lower(): c for c in meta_df.columns}
+    candidates = [
+        "track #",
+        "track#",
+        "track number",
+        "track no",
+        "track id",
+        "track",
+    ]
+    for c in candidates:
+        if c in norm_map:
+            return norm_map[c]
+    return meta_df.columns[0]
+
+
+def _track_whitelist(meta_df: pd.DataFrame) -> set[str]:
+    if meta_df is None or meta_df.empty:
+        return set()
+    track_col = _resolve_track_col(meta_df)
+    whitelist: set[str] = set()
+    for val in meta_df[track_col].dropna():
+        track_raw = str(val).strip()
+        if not track_raw or track_raw.lower() == "nan":
+            continue
+        if track_raw.startswith("T"):
+            whitelist.add(track_raw)
+        else:
+            whitelist.add(f"T{track_raw}")
+    return whitelist
+
+
+def _filter_data_cols(data_df: pd.DataFrame, meta_df: pd.DataFrame | None) -> pd.DataFrame:
+    whitelist = _track_whitelist(meta_df)
+    if not whitelist:
+        return data_df
+    keep = [c for c in data_df.columns if str(c).strip() in whitelist]
+    return data_df[keep]
+
+
+def _norm_t6(series: pd.Series) -> pd.Series:
+    def _norm(val: object) -> str:
+        if pd.isna(val):
+            return ""
+        s = str(val).strip().replace(" ", "")
+        if s.endswith(".0"):
+            s = s[:-2]
+        return s
+    return series.map(_norm)
+
+
+def _t6_masks(series: pd.Series, t5_series: pd.Series | None = None) -> Tuple[pd.Series, pd.Series]:
+    clean = _norm_t6(series)
+    if t5_series is not None:
+        mask = t5_series.astype(str).str.strip().isin(EXCLUDED_T6_VARIANTS)
+        if mask.any():
+            clean = clean.mask(mask, "")
+    path_mask = clean.isin({"4", "5", "4;5"})
+    ben_mask = clean.isin({"1", "2", "1;2"})
+    return path_mask, ben_mask
 
 
 def _get_data_block(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
@@ -76,7 +140,7 @@ def _get_final_classification(classification_str: str) -> float:
     return 1
 
 
-def _prepare_df(df: pd.DataFrame) -> pd.DataFrame:
+def _prepare_df(df: pd.DataFrame, meta_df: pd.DataFrame | None = None) -> pd.DataFrame:
     df = _normalize_columns(df)
     if DATA_START_COL not in df.columns:
         raise KeyError(f"Missing data start column: {DATA_START_COL}")
@@ -85,6 +149,7 @@ def _prepare_df(df: pd.DataFrame) -> pd.DataFrame:
     start_idx = df.columns.get_loc(DATA_START_COL)
     df = df[df[REFERENCE_COL].notna()].copy()
     data_df = df.iloc[:, start_idx:]
+    data_df = _filter_data_cols(data_df, meta_df)
     df = df[data_df.notna().any(axis=1)].copy()
     return df
 
@@ -96,10 +161,11 @@ def _mcc(tp: int, fp: int, tn: int, fn: int) -> float:
     return (tp * tn - fp * fn) / np.sqrt(denom)
 
 
-def _compute_fold_metrics(df: pd.DataFrame, n_splits: int) -> List[Dict[str, float]]:
-    df = _prepare_df(df)
+def _compute_fold_metrics(df: pd.DataFrame, n_splits: int, meta_df: pd.DataFrame | None = None) -> List[Dict[str, float]]:
+    df = _prepare_df(df, meta_df)
     start_col_index = df.columns.get_loc(DATA_START_COL)
     assay_cols = list(df.columns[start_col_index:])
+    assay_cols = list(_filter_data_cols(df[assay_cols], meta_df).columns)
 
     kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
     metrics_list: List[Dict[str, float]] = []
@@ -110,10 +176,11 @@ def _compute_fold_metrics(df: pd.DataFrame, n_splits: int) -> List[Dict[str, flo
 
         specificity_sensitivity = {}
         for column in assay_cols:
-            tp = ((train_df[column] == 2) & (train_df[REFERENCE_COL].isin([4, 5, "4;5"]))).sum()
-            tn = ((train_df[column] == 0) & (train_df[REFERENCE_COL].isin([1, 2, "1;2"]))).sum()
-            fp = ((train_df[column] == 2) & ~train_df[REFERENCE_COL].isin([1, 2, "1;2"])).sum()
-            fn = ((train_df[column] == 0) & ~train_df[REFERENCE_COL].isin([4, 5, "4;5"])).sum()
+            path_mask, ben_mask = _t6_masks(train_df[REFERENCE_COL], train_df.get("T5"))
+            tp = ((train_df[column] == 2) & path_mask).sum()
+            tn = ((train_df[column] == 0) & ben_mask).sum()
+            fp = ((train_df[column] == 2) & ~ben_mask).sum()
+            fn = ((train_df[column] == 0) & ~path_mask).sum()
 
             p1_denom = tp + tn + fp + fn
             p1 = (tp + fn) / p1_denom if p1_denom > 0 else 0.0
@@ -145,8 +212,7 @@ def _compute_fold_metrics(df: pd.DataFrame, n_splits: int) -> List[Dict[str, flo
         t6 = test_df.loc[valid, REFERENCE_COL]
         final_valid = final_class.loc[valid]
 
-        pathogenic = t6.isin([4, 5, "4;5"])
-        benign = t6.isin([1, 2, "1;2"])
+        pathogenic, benign = _t6_masks(t6, test_df.loc[valid].get("T5"))
 
         tp = int(((final_valid == 2) & pathogenic).sum())
         tn = int(((final_valid == 0) & benign).sum())
@@ -243,6 +309,8 @@ def write_sup_table_11(
     brca1_table: pd.DataFrame,
     brca2_table: pd.DataFrame,
     output_path: str,
+    brca1_metadata: pd.DataFrame | None = None,
+    brca2_metadata: pd.DataFrame | None = None,
 ) -> None:
     output_file = Path(output_path)
     output_file.parent.mkdir(parents=True, exist_ok=True)
@@ -261,10 +329,10 @@ def write_sup_table_11(
     ws["A1"].font = Font(bold=True)
     ws["A1"].alignment = Alignment(horizontal="left", vertical="center", wrap_text=False)
 
-    metrics_brca1 = _compute_fold_metrics(brca1_table, n_splits=10)
+    metrics_brca1 = _compute_fold_metrics(brca1_table, n_splits=10, meta_df=brca1_metadata)
     _write_block(ws, 2, "BRCA1", "K=10", metrics_brca1)
 
-    metrics_brca2 = _compute_fold_metrics(brca2_table, n_splits=5)
+    metrics_brca2 = _compute_fold_metrics(brca2_table, n_splits=5, meta_df=brca2_metadata)
     _write_block(ws, 17, "BRCA2", "K=5", metrics_brca2)
 
     for row in ws.iter_rows():
