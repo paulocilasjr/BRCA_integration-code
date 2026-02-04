@@ -3,6 +3,7 @@ import pandas as pd
 from sup_table_7 import summarize_tables, write_sup_table_7
 from sup_table_8 import summarize_tables as summarize_tables_8, write_sup_table_8
 from sup_table_9_10 import build_track_classification_map, write_sup_table_9_10
+from supp_fig2 import generate_supp_fig2
 from sup_table_11 import write_sup_table_11
 from sup_table_12_13 import write_sup_table_12_13
 from sup_table_14_15 import write_sup_table_14_15
@@ -163,6 +164,7 @@ if __name__ == "__main__":
         BRCA2_metadata,
         OUTPUT_PATH,
     )
+    generate_supp_fig2(input_path=OUTPUT_PATH, output_prefix="figures/supp_fig2")
 
     write_sup_table_11(
         BRCA1_table,
