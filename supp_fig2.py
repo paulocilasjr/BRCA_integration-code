@@ -19,6 +19,7 @@ import matplotlib.pyplot as plt
 # Update these mappings if the input table headers change.
 COLUMN_MAP = {
     "track": "Track",
+    "ref_total": "Total",
     "sensitivity": "Sensitivity",
     "sens_ci_low": "95% CI lower",
     "sens_ci_high": "95% CI upper",
@@ -53,6 +54,7 @@ def _load_table(path: Path, sheet: str, gene: str, column_map: dict[str, str]) -
         {
             "gene": gene,
             "track": df[column_map["track"]],
+            "ref_total": df[column_map["ref_total"]],
             "sensitivity": df[column_map["sensitivity"]],
             "sens_ci_low": df[column_map["sens_ci_low"]],
             "sens_ci_high": df[column_map["sens_ci_high"]],
@@ -66,6 +68,7 @@ def _load_table(path: Path, sheet: str, gene: str, column_map: dict[str, str]) -
     data = data[data["track"].str.lower().ne("nan") & data["track"].ne("")]
 
     for col in [
+        "ref_total",
         "sensitivity",
         "sens_ci_low",
         "sens_ci_high",
@@ -80,7 +83,17 @@ def _load_table(path: Path, sheet: str, gene: str, column_map: dict[str, str]) -
 
 def _ordered_tracks(data: pd.DataFrame) -> list[str]:
     tracks = data["track"].dropna().astype(str).str.strip().tolist()
-    return sorted(set(tracks), key=_track_sort_key)
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for track in tracks:
+        match = re.search(r"(\\d+)", track)
+        if match and int(match.group(1)) < 8:
+            continue
+        if track in seen:
+            continue
+        seen.add(track)
+        ordered.append(track)
+    return ordered
 
 
 def _plot_panel(
@@ -112,7 +125,8 @@ def _plot_panel(
         estimate = row[metric]
         low = row[ci_low]
         high = row[ci_high]
-        missing = pd.isna(estimate) or pd.isna(low) or pd.isna(high)
+        ref_total = row.get("ref_total", float("nan"))
+        missing = pd.isna(ref_total) or ref_total == 0 or pd.isna(estimate) or pd.isna(low) or pd.isna(high)
 
         if missing:
             label_color = "red"
