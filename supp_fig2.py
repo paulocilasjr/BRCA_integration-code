@@ -249,11 +249,13 @@ def generate_supp_fig2(
 
     png_path = output_prefix.with_suffix(".png")
     pdf_path = output_prefix.with_suffix(".pdf")
+    svg_path = output_prefix.with_suffix(".svg")
     fig.savefig(png_path, dpi=300)
     fig.savefig(pdf_path)
+    fig.savefig(svg_path)
     plt.close(fig)
 
-    return png_path, pdf_path
+    return png_path, pdf_path, svg_path
 
 
 def main() -> None:
@@ -282,13 +284,13 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    png_path, pdf_path = generate_supp_fig2(
+    png_path, pdf_path, svg_path = generate_supp_fig2(
         input_path=args.input,
         output_prefix=args.output_prefix,
         brca1_sheet=args.brca1_sheet,
         brca2_sheet=args.brca2_sheet,
     )
-    print(f"Saved {png_path} and {pdf_path}")
+    print(f"Saved {png_path}, {pdf_path}, and {svg_path}")
 
 
 if __name__ == "__main__":
