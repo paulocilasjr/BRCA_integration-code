@@ -358,6 +358,7 @@ def build_feature_table(
     assign_df: pd.DataFrame,
     features_df: pd.DataFrame,
     gene_label: str | None = None,
+    apply_legacy_reference_overrides: bool = False,
 ) -> pd.DataFrame:
     base = assign_df.copy()
     base = base[base["Include"]].dropna(subset=["T3", "T5"])
@@ -393,7 +394,9 @@ def build_feature_table(
         rows.append(row)
 
     out = pd.DataFrame(rows)
-    return _apply_bucket_overrides(out, gene_label)
+    if apply_legacy_reference_overrides:
+        return _apply_bucket_overrides(out, gene_label)
+    return out
 
 
 # --------------------------------------------------------------------------------------
