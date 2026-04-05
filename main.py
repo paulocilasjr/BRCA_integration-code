@@ -151,12 +151,6 @@ if __name__ == "__main__":
     BRCA1_Reference_panel = tables["BRCA1_Reference_panel"]
     BRCA2_Reference_panel = tables["BRCA2_Reference_panel"]
 
-    summary_7 = summarize_tables(BRCA1_table, BRCA2_table, BRCA1_metadata, BRCA2_metadata)
-    write_sup_table_7(summary_7, OUTPUT_PATH)
-
-    summary_8 = summarize_tables_8(BRCA1_table, BRCA2_table, BRCA1_metadata, BRCA2_metadata)
-    write_sup_table_8(summary_8, OUTPUT_PATH)
-
     write_sup_table_9_10(
         BRCA1_table,
         BRCA1_metadata,
@@ -165,6 +159,12 @@ if __name__ == "__main__":
         OUTPUT_PATH,
     )
     generate_supp_fig2(input_path=OUTPUT_PATH, output_prefix="figures/supp_fig2")
+
+    summary_7 = summarize_tables(BRCA1_table, BRCA2_table, BRCA1_metadata, BRCA2_metadata)
+    write_sup_table_7(summary_7, OUTPUT_PATH)
+
+    summary_8 = summarize_tables_8(BRCA1_table, BRCA2_table, BRCA1_metadata, BRCA2_metadata)
+    write_sup_table_8(summary_8, OUTPUT_PATH)
 
     write_sup_table_11(
         BRCA1_table,
@@ -200,8 +200,8 @@ if __name__ == "__main__":
     brca2_features = load_features(None, BRCA2_FEATURES, "BRCA2")
     brca1_assign = build_assignment_df(sup12_df)
     brca2_assign = build_assignment_df(sup13_df)
-    brca1_tbl = build_feature_table(brca1_assign, brca1_features)
-    brca2_tbl = build_feature_table(brca2_assign, brca2_features)
+    brca1_tbl = build_feature_table(brca1_assign, brca1_features, gene_label="BRCA1")
+    brca2_tbl = build_feature_table(brca2_assign, brca2_features, gene_label="BRCA2")
     write_sup_table_16(brca1_tbl, brca2_tbl, OUTPUT_PATH)
 
     write_sup_table_17(
@@ -219,4 +219,8 @@ if __name__ == "__main__":
         OUTPUT_PATH,
     )
 
-    print("Sup Table 7, Sup Table 8, Sup Table 9, Sup Table 10, Sup Table 11, Sup Table 12, Sup Table 13, Sup Table 14, Sup Table 15, and Sup Table 16 written to results/code_generated.xlsx")
+    print(
+        "Sup Table 7, Sup Table 8, Sup Table 9, Sup Table 10, Sup Table 11, "
+        "Sup Table 12, Sup Table 13, Supp Table 14, Supp Table 15, SuppTable 16, "
+        "Supp Table 17, Sup Table 18, and Sup Table 19 written to results/code_generated.xlsx"
+    )

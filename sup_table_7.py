@@ -111,14 +111,14 @@ def total_vus_variants_tested(df: pd.DataFrame, meta_df: pd.DataFrame | None = N
 
 
 def total_reference_variants_tested(df: pd.DataFrame, meta_df: pd.DataFrame | None = None) -> int:
-    df = _mask_t6_by_variant(df)
     tested = _row_data_counts(df, meta_df).gt(0)
     t6 = _clean_reference_col(df[REFERENCE_COL])
     return int((tested & t6.notna()).sum())
 
 
 def summarize_table(df: pd.DataFrame, meta_df: pd.DataFrame | None = None) -> Dict[str, Union[int, Dict[int, int]]]:
-    df = _mask_t6_by_variant(df)
+    raw_df = _normalize_columns(df)
+    df = _mask_t6_by_variant(raw_df)
     data_counts = _row_data_counts(df, meta_df)
     total_rows = int(len(df))
     t7 = pd.to_numeric(df[DOCUMENTED_COL], errors="coerce").fillna(0)
@@ -150,7 +150,7 @@ def summarize_table(df: pd.DataFrame, meta_df: pd.DataFrame | None = None) -> Di
         "total_data_points": int(data_counts.sum()),
         "total_variants_tested": int(data_counts.gt(0).sum()),
         "total_vus_variants_tested": total_vus_variants_tested(df, meta_df),
-        "total_reference_variants_tested": total_reference_variants_tested(df, meta_df),
+        "total_reference_variants_tested": total_reference_variants_tested(raw_df, meta_df),
         "reported_total": reported_total,
         "reported_tested": reported_tested,
         "reported_vus_tested": reported_vus_tested,
@@ -184,16 +184,16 @@ def write_sup_table_7(
 
     if output_file.exists():
         wb = load_workbook(output_file)
-        if "Sup Table 7" in wb.sheetnames:
-            wb.remove(wb["Sup Table 7"])
-        ws = wb.create_sheet("Sup Table 7")
+        if "Sup Table 9" in wb.sheetnames:
+            wb.remove(wb["Sup Table 9"])
+        ws = wb.create_sheet("Sup Table 9")
     else:
         wb = Workbook()
         ws = wb.active
-        ws.title = "Sup Table 7"
+        ws.title = "Sup Table 9"
 
     ws["A1"] = (
-        "Supplementary Table 7: Summary statistics for tested BRCA1 and BRCA2 variants "
+        "Supplementary Table 9: Summary statistics for tested BRCA1 and BRCA2 variants "
         "(number of individual instances of an assay performed for each variant)"
     )
     ws["A1"].font = Font(bold=True)
@@ -224,7 +224,7 @@ def write_sup_table_7(
     ws["F9"] = "%"
 
     ws["A10"] = "Total number of unique missense variants resulting from single nucleotide change"
-    ws["A11"] = "Not yet test"
+    ws["A11"] = "Not yet tested"
     ws["B10"] = summary["BRCA1"]["total_rows"]
     ws["E10"] = summary["BRCA2"]["total_rows"]
     ws["C10"] = 100
@@ -244,7 +244,7 @@ def write_sup_table_7(
     start_row = 12
     for offset, cutoff in enumerate(CUTOFFS):
         row = start_row + offset
-        ws[f"A{row}"] = f"Tested >= {cutoff} times"
+        ws[f"A{row}"] = f"Tested ≥ {cutoff} times"
         brca1_val = summary["BRCA1"]["tested_ge"][cutoff]
         brca2_val = summary["BRCA2"]["tested_ge"][cutoff]
         ws[f"B{row}"] = brca1_val
@@ -303,7 +303,7 @@ def write_sup_table_7(
     ref_start_row = 30
     for offset, cutoff in enumerate(CUTOFFS):
         row = ref_start_row + offset
-        ws[f"A{row}"] = f"Tested >= {cutoff} times"
+        ws[f"A{row}"] = f"Tested ≥ {cutoff} times"
         brca1_val = summary["BRCA1"]["reference_tested_ge"][cutoff]
         brca2_val = summary["BRCA2"]["reference_tested_ge"][cutoff]
         ws[f"B{row}"] = brca1_val
@@ -311,13 +311,13 @@ def write_sup_table_7(
         ws[f"C{row}"] = percent(brca1_val, summary["BRCA1"]["reference_total"])
         ws[f"F{row}"] = percent(brca2_val, summary["BRCA2"]["reference_total"])
 
-    ws["A40"] = "VUS only (excluding reference variants)"
+    ws["A40"] = "VUS (missense) only (excluding reference variants)"
     ws["B40"] = "N"
     ws["C40"] = "%"
     ws["E40"] = "N"
     ws["F40"] = "%"
 
-    ws["A41"] = "Total number of possible VUS"
+    ws["A41"] = "Total number of possible VUS (missense)"
     ws["A42"] = "Not yet test"
 
     ws["B41"] = summary["BRCA1"]["vus_total"]
@@ -333,7 +333,7 @@ def write_sup_table_7(
     vus_start_row = 43
     for offset, cutoff in enumerate(VUS_CUTOFFS):
         row = vus_start_row + offset
-        ws[f"A{row}"] = f"VUS tested >= {cutoff} times"
+        ws[f"A{row}"] = f"VUS tested ≥ {cutoff} times"
         brca1_val = summary["BRCA1"]["vus_tested_ge"][cutoff]
         brca2_val = summary["BRCA2"]["vus_tested_ge"][cutoff]
         ws[f"B{row}"] = brca1_val

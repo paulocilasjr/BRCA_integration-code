@@ -6,6 +6,7 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Font
 
 DATA_START_COL = "T8"
+FINAL_CODE_COL = "Final functional code label"
 
 CLASSIFICATION_HIERARCHY = {
     "BS3": 5,
@@ -238,7 +239,7 @@ def _build_output(
                 "All_votes (track)": str(votes),
                 "Concordance": conc,
                 "Preponderance of evidence": pre,
-                "Integrated ACMG evidence criteria": final_code,
+                FINAL_CODE_COL: final_code,
                 "Functional evidence in favor of": notes,
                 "Hypomorph observation": hypo,
             }
@@ -251,7 +252,7 @@ def _build_output(
         "All_votes (track)",
         "Concordance",
         "Preponderance of evidence",
-        "Integrated ACMG evidence criteria",
+        FINAL_CODE_COL,
         "Functional evidence in favor of",
         "Hypomorph observation",
     ]

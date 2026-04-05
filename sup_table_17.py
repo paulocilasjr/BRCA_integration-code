@@ -21,8 +21,8 @@ from openpyxl.styles import Alignment, Font
 FA_VARIANTS = {
     "BRCA1": ["C61G", "C64Y", "R1699W", "R1699Q", "V1736A"],
     "BRCA2": [
-        "I3412V", "N372H", "T598A", "E804A", "G106R", "V159M", "R2108C", "R2336H",
-        "R2336P", "I2490T", "L2510P", "F2562L", "E2599G", "Y2601C", "S2616F",
+        "N372H", "T598A", "V159M", "R2108C", "R2336H", "R2336P", "I2490T",
+        "L2510P", "F2562L", "E2599G", "Y2601C", "S2616F",
         "R2625S", "W2626C", "Q2655R", "S2670L", "A2698T", "D2723H", "D2723V",
         "R2784W", "R2784Q", "G2793R", "R2824T", "R2842C", "E3002K", "G3003E",
         "A3028P", "L3101R",
@@ -31,6 +31,7 @@ FA_VARIANTS = {
 
 FA_TOTALS = {"BRCA1": 5, "BRCA2": 28}
 TOTAL_VARIANTS = {"BRCA1": 3086, "BRCA2": 6100}
+FINAL_CODE_CANDIDATES = ("Final functional code label", "Integrated ACMG evidence criteria")
 
 
 def _parse_variant(code: str) -> Tuple[str, int, str]:
@@ -92,7 +93,10 @@ def _compute_rr_ci(a: int, n1: int, c: int, n0: int) -> Tuple[float, float, floa
 def _category_masks(df: pd.DataFrame) -> Dict[str, pd.Series]:
     conc = df["Concordance"].astype(str).str.strip().str.lower()
     prepon = df["Preponderance of evidence"].astype(str).str.strip().str.lower()
-    criteria = df["Integrated ACMG evidence criteria"].astype(str).str.strip().str.lower()
+    criteria_col = next((c for c in FINAL_CODE_CANDIDATES if c in df.columns), None)
+    if criteria_col is None:
+        raise KeyError(f"Missing final functional code column. Expected one of: {FINAL_CODE_CANDIDATES}")
+    criteria = df[criteria_col].astype(str).str.strip().str.lower()
     hypo = df["Hypomorph observation"].astype(str).str.strip().str.upper()
 
     return {
@@ -125,8 +129,8 @@ def _write_block(ws, start_row: int, gene_label: str, fa_n: int, all_n: int) -> 
     # Header row for the gene block
     ws.cell(row=start_row, column=1, value=gene_label).font = Font(bold=True)
     for col, value in [
-        (2, f"FA variants n = {fa_n}"),
-        (3, f"All variants n = {all_n}"),
+        (2, f"Fraction of FA variants (n = {fa_n})"),
+        (3, f"Fraction of all variants (n = {all_n})"),
         (4, "LR"),
         (5, "95% CI"),
     ]:
@@ -198,13 +202,14 @@ def write_sup_table_17(
 
     if output_file.exists():
         wb = load_workbook(output_file)
-        if "Sup Table 17" in wb.sheetnames:
-            wb.remove(wb["Sup Table 17"])
-        ws = wb.create_sheet("Sup Table 17")
+        for sheet_name in ("Sup Table 17", "Supp Table 17"):
+            if sheet_name in wb.sheetnames:
+                wb.remove(wb[sheet_name])
+        ws = wb.create_sheet("Supp Table 17")
     else:
         wb = Workbook()
         ws = wb.active
-        ws.title = "Sup Table 17"
+        ws.title = "Supp Table 17"
 
     ws.sheet_view.showGridLines = False
 

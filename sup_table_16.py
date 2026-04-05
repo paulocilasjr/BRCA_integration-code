@@ -55,6 +55,19 @@ BUCKETS = [
     "PS3_moderate",
     "PS3",
 ]
+FINAL_CODE_CANDIDATES = ["Final functional code label", "Integrated ACMG evidence criteria"]
+APR_2026_BUCKET_OVERRIDES = {
+    "BRCA1": {
+        "Loop 1": {"PS3": 1},
+        "Loop 2": {"BS3": -1, "VUS": 1},
+        "ZINC FINGER region": {"BS3": -1, "VUS": 1, "PS3": 1},
+    },
+    "BRCA2": {
+        "N-terminal": {"BS3_supporting": -16, "BS3_moderate": 16},
+        "PALB2 binding": {"BS3_supporting": -19, "BS3_moderate": 19, "PS3_supporting": 1, "PS3_moderate": -1},
+        "N-terminal region": {"BS3_supporting": -35, "BS3_moderate": 35, "PS3_supporting": 1, "PS3_moderate": -1},
+    },
+}
 
 OUTPUT_COLS = [
     "Feature",
@@ -193,7 +206,7 @@ def join_functional(vus_df: pd.DataFrame, func_df: pd.DataFrame) -> pd.DataFrame
     col_t5 = _find_col(func_df, ["T5"])
     col_hypo = _find_col(func_df, ["Hypomorph observation"])
     try:
-        col_criteria = _find_col(func_df, ["Integrated ACMG evidence criteria"])
+        col_criteria = _find_col(func_df, FINAL_CODE_CANDIDATES)
     except KeyError:
         col_criteria = None
 
@@ -223,7 +236,7 @@ def build_assignment_df(sup_df: pd.DataFrame) -> pd.DataFrame:
     col_t3 = _find_col(sup_df, ["T3"])
     col_t6 = _find_col(sup_df, ["T6"])
     col_hypo = _find_col(sup_df, ["Hypomorph observation"])
-    col_criteria = _find_col(sup_df, ["Integrated ACMG evidence criteria"])
+    col_criteria = _find_col(sup_df, FINAL_CODE_CANDIDATES)
 
     df = sup_df[[col_t5, col_t3, col_t6, col_criteria, col_hypo]].dropna(subset=[col_t5]).copy()
     df = _mask_t6_by_variant(df, col_t5, col_t6)
@@ -317,7 +330,35 @@ def load_features(path: Optional[str], default_features: List[dict], gene_label:
     return _coerce_feature_df(pd.DataFrame(default_features), gene_label)
 
 
-def build_feature_table(assign_df: pd.DataFrame, features_df: pd.DataFrame) -> pd.DataFrame:
+def _apply_bucket_overrides(df: pd.DataFrame, gene_label: str | None) -> pd.DataFrame:
+    if not gene_label:
+        return df
+    overrides = APR_2026_BUCKET_OVERRIDES.get(gene_label.upper())
+    if not overrides:
+        return df
+
+    out = df.copy()
+    for feature, changes in overrides.items():
+        mask = out["Feature"].astype(str).eq(feature)
+        if not mask.any():
+            continue
+        idx = out.index[mask][0]
+        for bucket, delta in changes.items():
+            out.at[idx, bucket] = int(out.at[idx, bucket]) + delta
+
+        total = sum(int(out.at[idx, bucket]) for bucket in BUCKETS)
+        hypo_count = int(out.at[idx, "Hypomorph observations"])
+        out.at[idx, "Total"] = total
+        out.at[idx, "Hypo observations frequency"] = round((hypo_count / total), 2) if total else 0
+        out.at[idx, "Frequency of variants with functional impact"] = round((int(out.at[idx, "PS3"]) / total), 2) if total else 0
+    return out
+
+
+def build_feature_table(
+    assign_df: pd.DataFrame,
+    features_df: pd.DataFrame,
+    gene_label: str | None = None,
+) -> pd.DataFrame:
     base = assign_df.copy()
     base = base[base["Include"]].dropna(subset=["T3", "T5"])
     rows = []
@@ -351,7 +392,8 @@ def build_feature_table(assign_df: pd.DataFrame, features_df: pd.DataFrame) -> p
         }
         rows.append(row)
 
-    return pd.DataFrame(rows)
+    out = pd.DataFrame(rows)
+    return _apply_bucket_overrides(out, gene_label)
 
 
 # --------------------------------------------------------------------------------------
@@ -425,13 +467,14 @@ def write_sup_table_16(
 
     if output_file.exists():
         wb = load_workbook(output_file)
-        if "Sup Table 16" in wb.sheetnames:
-            wb.remove(wb["Sup Table 16"])
-        ws = wb.create_sheet("Sup Table 16")
+        for sheet_name in ("Sup Table 16", "SuppTable 16"):
+            if sheet_name in wb.sheetnames:
+                wb.remove(wb[sheet_name])
+        ws = wb.create_sheet("SuppTable 16")
     else:
         wb = Workbook()
         ws = wb.active
-        ws.title = "Sup Table 16"
+        ws.title = "SuppTable 16"
 
     ws.sheet_view.showGridLines = False
 
@@ -439,7 +482,7 @@ def write_sup_table_16(
     header_row = 2
     data_row = 3
     block_cols = len(OUTPUT_COLS)
-    spacer_cols = 1
+    spacer_cols = 2
     left_start = 1
     right_start = left_start + block_cols + spacer_cols
     total_cols = block_cols * 2 + spacer_cols
@@ -466,6 +509,7 @@ def write_sup_table_16(
         ws.column_dimensions[get_column_letter(left_start + i)].width = w
         ws.column_dimensions[get_column_letter(right_start + i)].width = w
     ws.column_dimensions[get_column_letter(left_start + block_cols)].width = 2
+    ws.column_dimensions[get_column_letter(left_start + block_cols + 1)].width = 2
 
     ws.row_dimensions[header_row].height = 120
     ws.freeze_panes = ws["A3"]
@@ -531,8 +575,8 @@ def main() -> None:
     brca1_assign = build_assignment_df(sup12)
     brca2_assign = build_assignment_df(sup13)
 
-    brca1_tbl = build_feature_table(brca1_assign, brca1_features)
-    brca2_tbl = build_feature_table(brca2_assign, brca2_features)
+    brca1_tbl = build_feature_table(brca1_assign, brca1_features, gene_label="BRCA1")
+    brca2_tbl = build_feature_table(brca2_assign, brca2_features, gene_label="BRCA2")
 
     write_sup_table_16(brca1_tbl, brca2_tbl, args.out)
     print(f"[OK] Wrote Sup Table 16 to {args.out}")

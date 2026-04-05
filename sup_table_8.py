@@ -155,15 +155,15 @@ def write_sup_table_8(
 
     if output_file.exists():
         wb = load_workbook(output_file)
-        if "Sup Table 8" in wb.sheetnames:
-            wb.remove(wb["Sup Table 8"])
-        ws = wb.create_sheet("Sup Table 8")
+        if "Sup Table 10" in wb.sheetnames:
+            wb.remove(wb["Sup Table 10"])
+        ws = wb.create_sheet("Sup Table 10")
     else:
         wb = Workbook()
         ws = wb.active
-        ws.title = "Sup Table 8"
+        ws.title = "Sup Table 10"
 
-    ws["A1"] = "Supplementary Table 8: Track throughput"
+    ws["A1"] = "Supplementary Table 10: Track throughput"
     ws["B1"] = "BRCA1"
     ws["E1"] = "BRCA2"
     ws["A1"].alignment = Alignment(horizontal="left", vertical="center", wrap_text=False)
@@ -195,7 +195,7 @@ def write_sup_table_8(
     start_row = 5
     for offset, cutoff in enumerate(THROUGHPUT_CUTOFFS):
         row = start_row + offset
-        ws[f"A{row}"] = f"Tracks testing >= {cutoff} variants"
+        ws[f"A{row}"] = f"Tracks testing ≥ {cutoff} variants"
         brca1_val = summary["BRCA1"]["tracks_ge"][cutoff]
         brca2_val = summary["BRCA2"]["tracks_ge"][cutoff]
         ws[f"B{row}"] = brca1_val
@@ -219,7 +219,7 @@ def write_sup_table_8(
         row = ref_start_row + offset
         ws[f"A{row}"] = (
             "Tracks with # variants in ENIGMA+ClinVar reference panel "
-            f"[non-pathogenic; pathogenic] >= [{cutoff}:{cutoff}]"
+            f"[non-pathogenic; pathogenic] ≥ [{cutoff}:{cutoff}]"
         )
         brca1_val = summary["BRCA1"]["ref_panel_ge"][cutoff]
         brca2_val = summary["BRCA2"]["ref_panel_ge"][cutoff]
@@ -232,8 +232,8 @@ def write_sup_table_8(
     for offset, cutoff in enumerate(REF_PANEL_CUTOFFS):
         row = combo_start_row + offset
         ws[f"A{row}"] = (
-            "Tracks meeting the two criteria (#variants tested >= 10 and # variants in "
-            "ENIGMA+ClinVar reference panel >= [non-pathogenic; pathogenic] "
+            "Tracks meeting the two criteria (#variants tested ≥ 10 and # variants in "
+            "ENIGMA+ClinVar reference panel ≥ [non-pathogenic; pathogenic] "
             f"[{cutoff}:{cutoff}])"
         )
         brca1_val = summary["BRCA1"]["ref_panel_and_total_10"][cutoff]

@@ -23,10 +23,57 @@ import argparse
 import ast
 import re
 from pathlib import Path
-from typing import Iterable, List, Tuple
+from typing import Dict, Iterable, List, Tuple
 
 import pandas as pd
-from openpyxl import load_workbook
+from openpyxl import Workbook, load_workbook
+from openpyxl.styles import Alignment, Font
+
+
+FINAL_CODE_COL = "Final functional code label"
+TABLE_TITLES = {
+    "Sup Table 18": "Supplementary Table 18: Point system integration for BRCA1 variants",
+    "Sup Table 19": "Supplementary Table 19: Point system integration for BRCA2 variants",
+}
+REFERENCE_NOTE_LP = "Disregard (Reference LP/P)"
+REFERENCE_NOTE_LB = "Disregard (Reference LB/B)"
+SPECIAL_NOTES: Dict[str, Dict[str, str]] = {
+    "BRCA1": {
+        "p.R71G": "Disregard this classification: this variant has been classified as LP/P (due to splicing defect)",
+        "p.R71K": "Disregard this classification: this variant has been classified as LP/P (due to splicing defect)",
+        "p.R71W": "Disregard this classification: this variant has been classified as LP/P (due to splicing defect)",
+        "p.R1495K": "Disregard this classification: this variant has been classified as LP/P (due to splicing defect)",
+        "p.R1495M": "Disregard this classification: this variant has been classified as LP/P (due to splicing defect)",
+        "p.E1559K": "Disregard this classification: this variant has been classified as LP/P (due to splicing defect)",
+        "p.E1559Q": "Disregard this classification: this variant has been classified as LP/P (due to splicing defect)",
+        "p.A1623G": "Disregard this classification: this variant has been classified as LP/P (due to splicing defect)",
+        "p.E1682K": "Potential splicing defect (SpliceAI = 0.57)",
+        "p.D1692A": "Disregard this classification: this variant has been classified as LP/P (due to splicing defect)",
+        "p.C1787S": "Disregard this classification: this variant has been classified as LP/P (due to co-occurrence with BRCA1 p.Gly1788Asp)",
+    },
+    "BRCA2": {
+        "p.V159M": "Disregard this classification: this variant has been classified as LP/P (due to splicing defect)",
+        "p.V211I": "Disregard this classification: this variant has been classified as LP/P (due to splicng defect and co-occurrence with BRCA2 c.7008-2A>T)",
+        "p.R2336L": "Disregard this classification: this variant has been classified as LP/P (due to splicing defect)",
+        "p.R2336P": "Disregard this classification: this variant has been classified as LP/P (due to splicing defect)",
+        "p.R2602T": "Disregard this classification: this variant has been classified as LP/P (due to splicing defect)",
+        "p.I2675V": "Disregard this classification: this variant has been classified as LP/P (due to splicing defect)",
+        "p.D2679Y": "Disregard this classification: this variant has been classified as LP/P (due to splicing defect)",
+    },
+}
+MANUAL_VALUE_OVERRIDES: Dict[str, Dict[str, Dict[str, object]]] = {
+    "BRCA1": {
+        "p.R71G": {"ACMG PP1/BS4 segregation points": 8},
+    },
+    "BRCA2": {
+        "p.D2312V": {"ACMG PP1/BS4 segregation points": -4},
+        "p.R2336H": {"ACMG PP1/BS4 segregation points": 4},
+        "p.Q2829R": {"ACMG PP1/BS4 segregation points": 2},
+    },
+}
+FINAL_CLASS_OVERRIDES: Dict[str, Dict[str, str]] = {
+    "BRCA2": {"p.R2336H": "P"},
+}
 
 
 def _norm_col(c: str) -> str:
@@ -45,6 +92,18 @@ def _find_col(df: pd.DataFrame, candidates: Iterable[str]) -> str:
             if key in k_norm:
                 return k_orig
     raise KeyError(f"Could not find any of columns: {list(candidates)}")
+
+
+def _reference_note_from_t6_and_class(t6_value: object, final_class: object) -> object:
+    if pd.isna(t6_value):
+        return pd.NA
+    tokens = set(re.findall(r"\d+", str(t6_value)))
+    final_class_norm = str(final_class).strip().upper()
+    if tokens & {"4", "5"} and final_class_norm not in {"LP", "P"}:
+        return REFERENCE_NOTE_LP
+    if tokens & {"1", "2"} and final_class_norm not in {"LB", "B"}:
+        return REFERENCE_NOTE_LB
+    return pd.NA
 
 
 def resolve_sheet_name(xlsx_path: str, preferred: str, fallbacks: List[str]) -> str:
@@ -173,8 +232,13 @@ def _attach_new_columns(
     base_df: pd.DataFrame,
     alpha_df: pd.DataFrame,
     other_points_df: pd.DataFrame,
+    gene_label: str,
 ) -> pd.DataFrame:
-    df = base_df.copy()
+    base = base_df.copy()
+    if "Integrated ACMG evidence criteria" in base.columns and FINAL_CODE_COL not in base.columns:
+        base = base.rename(columns={"Integrated ACMG evidence criteria": FINAL_CODE_COL})
+
+    df = base.copy()
     df.columns = df.columns.astype(str).str.strip()
 
     col_votes = next((c for c in df.columns if "all_votes" in _norm_col(c)), None)
@@ -218,6 +282,15 @@ def _attach_new_columns(
         if col in df.columns:
             df = df.drop(columns=[col])
 
+    col_t5 = _find_col(df, ["T5"])
+    col_t6 = _find_col(df, ["T6"])
+    for variant, overrides in MANUAL_VALUE_OVERRIDES.get(gene_label, {}).items():
+        mask = df[col_t5].astype(str).str.strip().eq(variant)
+        if not mask.any():
+            continue
+        for column_name, value in overrides.items():
+            df.loc[mask, column_name] = value
+
     # Final ACMG points + classification
     points_cols = [
         "ACMG PP3/BP4 in silico predictor points",
@@ -231,6 +304,18 @@ def _attach_new_columns(
 
     df["FINAL ACMG POINTS"] = df[points_cols].sum(axis=1)
     df["FINAL ClinVar Classification"] = df["FINAL ACMG POINTS"].apply(classify_final_points)
+    for variant, final_class in FINAL_CLASS_OVERRIDES.get(gene_label, {}).items():
+        mask = df[col_t5].astype(str).str.strip().eq(variant)
+        if mask.any():
+            df.loc[mask, "FINAL ClinVar Classification"] = final_class
+    df["Notes"] = [
+        _reference_note_from_t6_and_class(t6_value, final_class)
+        for t6_value, final_class in zip(df[col_t6], df["FINAL ClinVar Classification"])
+    ]
+    for variant, note in SPECIAL_NOTES.get(gene_label, {}).items():
+        mask = df[col_t5].astype(str).str.strip().eq(variant)
+        if mask.any():
+            df.loc[mask, "Notes"] = note
 
     # Order: keep original columns, then append new ones in required order
     append_cols = [
@@ -246,26 +331,58 @@ def _attach_new_columns(
         "ACMG BA1/BS1 allele freq points",
         "FINAL ACMG POINTS",
         "FINAL ClinVar Classification",
+        "Notes",
     ]
     existing = [c for c in append_cols if c in df.columns]
-    base_cols = [c for c in base_df.columns if c in df.columns]
+    base_cols = [c for c in base.columns if c in df.columns]
     df = df[base_cols + existing]
     return df
 
 
-def _write_df(output_path: str, sheet_name: str, df: pd.DataFrame) -> None:
+def _write_df(output_path: str, sheet_name: str, title: str, df: pd.DataFrame) -> None:
     output_file = Path(output_path)
     output_file.parent.mkdir(parents=True, exist_ok=True)
+
     if output_file.exists():
         wb = load_workbook(output_file)
         if sheet_name in wb.sheetnames:
             wb.remove(wb[sheet_name])
-        wb.save(output_file)
-        with pd.ExcelWriter(output_file, engine="openpyxl", mode="a") as writer:
-            df.to_excel(writer, sheet_name=sheet_name, index=False)
+        ws = wb.create_sheet(sheet_name)
     else:
-        with pd.ExcelWriter(output_file, engine="openpyxl") as writer:
-            df.to_excel(writer, sheet_name=sheet_name, index=False)
+        wb = Workbook()
+        ws = wb.active
+        ws.title = sheet_name
+
+    ws["A1"] = title
+    ws["A1"].font = Font(name="Arial", size=10, bold=True)
+    ws["A1"].alignment = Alignment(horizontal="left", vertical="center", wrap_text=False)
+
+    def _excel_value(value):
+        if isinstance(value, (list, tuple, dict)):
+            return str(value)
+        try:
+            if pd.isna(value):
+                return None
+        except (TypeError, ValueError):
+            pass
+        return value
+
+    headers = list(df.columns)
+    for col_idx, header in enumerate(headers, start=1):
+        cell = ws.cell(row=2, column=col_idx, value=header)
+        cell.font = Font(name="Arial", size=10, bold=True)
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    for row_offset, (_, row) in enumerate(df.iterrows(), start=3):
+        for col_idx, header in enumerate(headers, start=1):
+            cell = ws.cell(row=row_offset, column=col_idx, value=_excel_value(row[header]))
+            cell.font = Font(name="Arial", size=10)
+            if col_idx in (1, 9, len(headers)):
+                cell.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+            else:
+                cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    wb.save(output_file)
 
 
 def write_sup_tables_18_19(
@@ -280,11 +397,11 @@ def write_sup_tables_18_19(
     other_b1 = _load_acmg_other_points(other_points_path, "BRCA1")
     other_b2 = _load_acmg_other_points(other_points_path, "BRCA2")
 
-    out18 = _attach_new_columns(sup12_df, alpha_b1, other_b1)
-    out19 = _attach_new_columns(sup13_df, alpha_b2, other_b2)
+    out18 = _attach_new_columns(sup12_df, alpha_b1, other_b1, "BRCA1")
+    out19 = _attach_new_columns(sup13_df, alpha_b2, other_b2, "BRCA2")
 
-    _write_df(output_path, "Sup Table 18", out18)
-    _write_df(output_path, "Sup Table 19", out19)
+    _write_df(output_path, "Sup Table 18", TABLE_TITLES["Sup Table 18"], out18)
+    _write_df(output_path, "Sup Table 19", TABLE_TITLES["Sup Table 19"], out19)
 
 
 def main() -> None:

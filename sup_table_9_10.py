@@ -314,14 +314,16 @@ def write_sup_table(
     sheet_name: str,
     title: str,
     total_missense: int,
+    legacy_sheet_names: List[str] | None = None,
 ) -> None:
     output_file = Path(output_path)
     output_file.parent.mkdir(parents=True, exist_ok=True)
 
     if output_file.exists():
         wb = load_workbook(output_file)
-        if sheet_name in wb.sheetnames:
-            wb.remove(wb[sheet_name])
+        for existing_name in [sheet_name, *(legacy_sheet_names or [])]:
+            if existing_name in wb.sheetnames:
+                wb.remove(wb[existing_name])
         ws = wb.create_sheet(sheet_name)
     else:
         wb = Workbook()
@@ -358,7 +360,7 @@ def write_sup_table(
     ws["W2"].font = Font(bold=True)
 
     ws.merge_cells("Y2:Z2")
-    ws["Y2"] = "ACMG Functional evidence strength"
+    ws["Y2"] = "ASSAY CREDENTIALS"
     ws["Y2"].font = Font(bold=True)
 
     headers = [
@@ -476,15 +478,17 @@ def write_sup_table_9_10(
         brca1_table,
         brca1_metadata,
         output_path,
-        "Sup Table 9",
-        "Supplementary Table 9: Summary statistics, specificity, sensitivity, odds of pathogenicity, and likelihood ratios for each BRCA1 track",
+        "Sup Table 7",
+        "Supplementary Table 7: Summary statistics, specificity, sensitivity, odds of pathogenicity, and likelihood ratios for each BRCA1 track",
         BRCA1_TOTAL_MISSENSE,
+        legacy_sheet_names=["Sup Table 9"],
     )
     write_sup_table(
         brca2_table,
         brca2_metadata,
         output_path,
-        "Sup Table 10",
-        "Supplementary Table 10: Summary statistics, specificity, sensitivity, odds of pathogenicity, and likelihood ratios for each BRCA2 track",
+        "Sup Table 8",
+        "Supplementary Table 8: Summary statistics, specificity, sensitivity, odds of pathogenicity, and likelihood ratios for each BRCA2 track",
         BRCA2_TOTAL_MISSENSE,
+        legacy_sheet_names=["Sup Table 10"],
     )

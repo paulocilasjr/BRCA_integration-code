@@ -265,7 +265,14 @@ def _average_row(metrics: List[Dict[str, float]]) -> Dict[str, float]:
     return avg
 
 
-def _write_block(ws, start_row: int, title: str, k_label: str, metrics: List[Dict[str, float]]) -> None:
+def _write_block(
+    ws,
+    start_row: int,
+    title: str,
+    k_label: str,
+    metrics: List[Dict[str, float]],
+    include_header: bool = True,
+) -> None:
     ws[f"A{start_row}"] = title
     ws[f"B{start_row}"] = k_label
     ws[f"A{start_row}"].font = Font(bold=True)
@@ -288,13 +295,16 @@ def _write_block(ws, start_row: int, title: str, k_label: str, metrics: List[Dic
         "MCC",
     ]
 
-    header_row = start_row + 1
-    for col_idx, header in enumerate(headers, start=1):
-        cell = ws.cell(row=header_row, column=col_idx)
-        cell.value = header
-        cell.font = Font(bold=True)
+    if include_header:
+        header_row = start_row + 1
+        for col_idx, header in enumerate(headers, start=1):
+            cell = ws.cell(row=header_row, column=col_idx)
+            cell.value = header
+            cell.font = Font(bold=True)
+        data_start = header_row + 1
+    else:
+        data_start = start_row + 2
 
-    data_start = header_row + 1
     for idx, row in enumerate(metrics):
         for col_idx, header in enumerate(headers, start=1):
             ws.cell(row=data_start + idx, column=col_idx, value=row[header])
@@ -333,7 +343,7 @@ def write_sup_table_11(
     _write_block(ws, 2, "BRCA1", "K=10", metrics_brca1)
 
     metrics_brca2 = _compute_fold_metrics(brca2_table, n_splits=5, meta_df=brca2_metadata)
-    _write_block(ws, 17, "BRCA2", "K=5", metrics_brca2)
+    _write_block(ws, 16, "BRCA2", "K=5", metrics_brca2, include_header=False)
 
     for row in ws.iter_rows():
         for cell in row:
@@ -348,7 +358,7 @@ def write_sup_table_11(
     for col_letter in ("A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O"):
         ws.column_dimensions[col_letter].width = 18
 
-    for row in (14, 24):
+    for row in (14, 23):
         for col in ("A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N"):
             cell = ws[f"{col}{row}"]
             if cell.value is not None:

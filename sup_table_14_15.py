@@ -119,12 +119,20 @@ def _panel_data_from_sup12(
     col_hypo = _find_col(sup_df, ["Hypomorph observation"])
     col_criteria = None
     try:
-        col_criteria = _find_col(sup_df, ["Integrated ACMG evidence criteria"])
+        col_criteria = _find_col(sup_df, ["Final functional code label", "Integrated ACMG evidence criteria"])
     except KeyError:
         col_criteria = None
 
-    sup_df = sup_df[[c for c in [col_t5, col_fe, col_hypo, col_criteria] if c]].dropna(subset=[col_t5]).copy()
+    col_t6 = None
+    try:
+        col_t6 = _find_col(sup_df, ["T6"])
+    except KeyError:
+        col_t6 = None
+
+    sup_df = sup_df[[c for c in [col_t5, col_t6, col_fe, col_hypo, col_criteria] if c]].dropna(subset=[col_t5]).copy()
     sup_df[col_t5] = sup_df[col_t5].astype(str)
+    if col_t6:
+        sup_df = _mask_t6_by_variant(sup_df, col_t5, col_t6)
     sup_df[col_fe] = sup_df[col_fe].astype(str).str.strip()
     sup_df[col_hypo] = sup_df[col_hypo].astype(str).str.strip().str.upper()
     if col_criteria:
@@ -141,6 +149,8 @@ def _panel_data_from_sup12(
     vus_variants = set(vus_sup1[col_t5_1].tolist())
 
     sup_df_vus = sup_df[sup_df[col_t5].isin(vus_variants)].copy()
+    if col_t6:
+        sup_df_vus = sup_df_vus[sup_df_vus[col_t6].isna()].copy()
 
     hypo_vars = set(
         sup_df_vus.loc[
@@ -269,8 +279,13 @@ def _write_panel_sheet(
 
     if output_file.exists():
         wb = load_workbook(output_file)
-        if sheet_name in wb.sheetnames:
-            wb.remove(wb[sheet_name])
+        legacy_names = {
+            "Supp Table 14": ("Sup Table 14",),
+            "Supp Table 15": ("Sup Table 15",),
+        }.get(sheet_name, ())
+        for existing_name in (sheet_name, *legacy_names):
+            if existing_name in wb.sheetnames:
+                wb.remove(wb[existing_name])
         ws = wb.create_sheet(sheet_name)
     else:
         wb = Workbook()
@@ -430,7 +445,7 @@ def write_sup_table_14_15(
 
     _write_panel_sheet(
         output_path,
-        "Sup Table 14",
+        "Supp Table 14",
         "Supplementary Table 14: Frequency and enrichment ratios of BRCA1 amino acid substitution stratified by functional category",
         "BRCA1",
         "B1",
@@ -438,7 +453,7 @@ def write_sup_table_14_15(
     )
     _write_panel_sheet(
         output_path,
-        "Sup Table 15",
+        "Supp Table 15",
         "Supplementary Table 15: Frequency and enrichment ratios of BRCA2 amino acid substitution stratified by functional category",
         "BRCA2",
         "B2",
@@ -728,7 +743,7 @@ def main():
     # Optional, if present: integrated criteria (useful if your file uses PS3/BS3 strings)
     col_criteria = None
     try:
-        col_criteria = find_col(sup12, ["Integrated ACMG evidence criteria"])
+        col_criteria = find_col(sup12, ["Final functional code label", "Integrated ACMG evidence criteria"])
     except KeyError:
         pass
 
