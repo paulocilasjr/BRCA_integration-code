@@ -18,7 +18,7 @@ from sup_table_16 import (
 )
 from sup_table_17 import write_sup_table_17
 
-FILE_PATH = "dataset/SUPP_TABLES_BRCA12_DEC_2025_WORKING_fixed.xlsx"
+FILE_PATH = "dataset/SUPP_TABLES_BRCA12_APR_2026.xlsx"
 OUTPUT_PATH = "results/code_generated.xlsx"
 
 SHEETS = {

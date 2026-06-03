@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Font
-from sklearn.model_selection import KFold
+from sklearn.model_selection import StratifiedKFold
 
 DATA_START_COL = "T8"
 REFERENCE_COL = "T6"
@@ -161,18 +161,36 @@ def _mcc(tp: int, fp: int, tn: int, fn: int) -> float:
     return (tp * tn - fp * fn) / np.sqrt(denom)
 
 
+def _reference_labels(df: pd.DataFrame) -> pd.Series:
+    path_mask, ben_mask = _t6_masks(df[REFERENCE_COL], df.get("T5"))
+    labels = pd.Series(pd.NA, index=df.index, dtype="object")
+    labels.loc[path_mask] = "pathogenic"
+    labels.loc[ben_mask] = "benign"
+    return labels
+
+
+def _label_counts(df: pd.DataFrame) -> Tuple[int, int]:
+    labels = _reference_labels(df)
+    return int((labels == "pathogenic").sum()), int((labels == "benign").sum())
+
+
 def _compute_fold_metrics(df: pd.DataFrame, n_splits: int, meta_df: pd.DataFrame | None = None) -> List[Dict[str, float]]:
     df = _prepare_df(df, meta_df)
+    labels = _reference_labels(df)
+    df = df.loc[labels.notna()].copy()
+    labels = labels.loc[df.index]
     start_col_index = df.columns.get_loc(DATA_START_COL)
     assay_cols = list(df.columns[start_col_index:])
     assay_cols = list(_filter_data_cols(df[assay_cols], meta_df).columns)
 
-    kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
+    kf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
     metrics_list: List[Dict[str, float]] = []
 
-    for fold, (train_index, test_index) in enumerate(kf.split(df), 1):
+    for fold, (train_index, test_index) in enumerate(kf.split(df, labels), 1):
         train_df = df.iloc[train_index].copy()
         test_df = df.iloc[test_index].copy()
+        train_pathogenic, train_benign = _label_counts(train_df)
+        test_pathogenic, test_benign = _label_counts(test_df)
 
         specificity_sensitivity = {}
         for column in assay_cols:
@@ -220,6 +238,7 @@ def _compute_fold_metrics(df: pd.DataFrame, n_splits: int, meta_df: pd.DataFrame
         fn = int(((final_valid == 0) & pathogenic).sum())
         no_call = int((final_valid == 1).sum())
         total = int(tp + tn + fp + fn + no_call)
+        no_call_rate = no_call / total if total > 0 else 0.0
 
         sens_denom = tp + fn
         sensitivity = tp / sens_denom if sens_denom > 0 else 0.0
@@ -232,6 +251,10 @@ def _compute_fold_metrics(df: pd.DataFrame, n_splits: int, meta_df: pd.DataFrame
         metrics_list.append(
             {
                 "fold": fold,
+                "train_pathogenic": train_pathogenic,
+                "train_benign": train_benign,
+                "test_pathogenic": test_pathogenic,
+                "test_benign": test_benign,
                 "sensitivity": round(sensitivity, 2),
                 "sensitivity_lower_95CI": round(sens_low, 2),
                 "sensitivity_upper_95CI": round(sens_high, 2),
@@ -243,6 +266,7 @@ def _compute_fold_metrics(df: pd.DataFrame, n_splits: int, meta_df: pd.DataFrame
                 "TN": tn,
                 "FN": fn,
                 "No Call": no_call,
+                "No Call Rate": round(no_call_rate, 2),
                 "Total": total,
                 "MCC": round(_mcc(tp, fp, tn, fn), 2),
             }
@@ -254,7 +278,18 @@ def _compute_fold_metrics(df: pd.DataFrame, n_splits: int, meta_df: pd.DataFrame
 def _average_row(metrics: List[Dict[str, float]]) -> Dict[str, float]:
     keys = [k for k in metrics[0].keys() if k != "fold"]
     avg: Dict[str, float] = {"fold": "AVG"}
-    no_avg_keys = {"TP", "FP", "TN", "FN", "No Call", "Total"}
+    no_avg_keys = {
+        "train_pathogenic",
+        "train_benign",
+        "test_pathogenic",
+        "test_benign",
+        "TP",
+        "FP",
+        "TN",
+        "FN",
+        "No Call",
+        "Total",
+    }
     for key in keys:
         if key in no_avg_keys:
             avg[key] = ""
@@ -280,6 +315,10 @@ def _write_block(
 
     headers = [
         "fold",
+        "train_pathogenic",
+        "train_benign",
+        "test_pathogenic",
+        "test_benign",
         "sensitivity",
         "sensitivity_lower_95CI",
         "sensitivity_upper_95CI",
@@ -291,6 +330,7 @@ def _write_block(
         "TN",
         "FN",
         "No Call",
+        "No Call Rate",
         "Total",
         "MCC",
     ]
@@ -335,7 +375,7 @@ def write_sup_table_11(
         ws = wb.active
         ws.title = "Sup Table 11"
 
-    ws["A1"] = "Supplementary Table 11: k fold cross-validation"
+    ws["A1"] = "Supplementary Table 11: stratified k fold cross-validation"
     ws["A1"].font = Font(bold=True)
     ws["A1"].alignment = Alignment(horizontal="left", vertical="center", wrap_text=False)
 
@@ -355,11 +395,53 @@ def write_sup_table_11(
             else:
                 cell.alignment = Alignment(horizontal="center", vertical="center")
 
-    for col_letter in ("A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O"):
+    for col_letter in (
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "G",
+        "H",
+        "I",
+        "J",
+        "K",
+        "L",
+        "M",
+        "N",
+        "O",
+        "P",
+        "Q",
+        "R",
+        "S",
+        "T",
+    ):
         ws.column_dimensions[col_letter].width = 18
 
     for row in (14, 23):
-        for col in ("A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N"):
+        for col in (
+            "A",
+            "B",
+            "C",
+            "D",
+            "E",
+            "F",
+            "G",
+            "H",
+            "I",
+            "J",
+            "K",
+            "L",
+            "M",
+            "N",
+            "O",
+            "P",
+            "Q",
+            "R",
+            "S",
+            "T",
+        ):
             cell = ws[f"{col}{row}"]
             if cell.value is not None:
                 cell.font = Font(name="Arial", size=10, bold=True)
