@@ -161,7 +161,7 @@ if __name__ == "__main__":
     write_sup_tables_18_19(
         sup12_df,
         sup13_df,
-        "dataset/AlphaMissense_Calculations_all.xlsx",
+        "dataset/eve/EVE_BRCA12_scores.xlsx",
         "dataset/ACMG_other_points.xlsx",
         OUTPUT_PATH,
     )

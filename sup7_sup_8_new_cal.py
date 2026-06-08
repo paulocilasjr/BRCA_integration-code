@@ -21,7 +21,7 @@ Z_SCORE = 1.95996
 
 INPUT_PATH = "dataset/SUPP_TABLES_BRCA12_APR_2026.xlsx"
 OUTPUT_PATH = "sup7_sup8_new_cal.xlsx"
-ALPHA_PATH = "dataset/AlphaMissense_Calculations_all.xlsx"
+PREDICTOR_PATH = "dataset/eve/EVE_BRCA12_scores.xlsx"
 OTHER_POINTS_PATH = "dataset/ACMG_other_points.xlsx"
 
 SHEETS = {
@@ -553,7 +553,7 @@ def write_sup_table(
 def generate_workbook(
     input_path: str = INPUT_PATH,
     output_path: str = OUTPUT_PATH,
-    alpha_path: str = ALPHA_PATH,
+    predictor_path: str = PREDICTOR_PATH,
     other_points_path: str = OTHER_POINTS_PATH,
 ) -> None:
     tables = load_tables(input_path)
@@ -592,10 +592,10 @@ def generate_workbook(
         tables["BRCA1_metadata"],
         tables["BRCA2_metadata"],
     )
-    resolved_alpha_path = _resolve_existing_path(
-        alpha_path,
-        "dataset/AlphaMissense_Calculations_all.xlsx",
-        "AlphaMissense_Calculations_all.xlsx",
+    resolved_predictor_path = _resolve_existing_path(
+        predictor_path,
+        "dataset/eve/EVE_BRCA12_scores.xlsx",
+        "EVE_BRCA12_scores.xlsx",
     )
     resolved_other_points_path = _resolve_existing_path(
         other_points_path,
@@ -604,19 +604,19 @@ def generate_workbook(
         "ACMG_other_points.xlsx",
         "evidence_criteria_v6_BRCA12.xlsx",
     )
-    if resolved_alpha_path and resolved_other_points_path:
+    if resolved_predictor_path and resolved_other_points_path:
         prepared_other_points_path = _prepare_other_points_workbook(resolved_other_points_path)
         write_sup_tables_18_19(
             sup12_df,
             sup13_df,
-            resolved_alpha_path,
+            resolved_predictor_path,
             prepared_other_points_path,
             output_path,
         )
     else:
         missing = []
-        if not resolved_alpha_path:
-            missing.append(alpha_path)
+        if not resolved_predictor_path:
+            missing.append(predictor_path)
         if not resolved_other_points_path:
             missing.append(other_points_path)
         print(

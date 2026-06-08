@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-Build Supplementary Tables 18 and 19 from Sup Tables 12/13 and AlphaMissense/ACMG inputs.
+Build Supplementary Tables 18 and 19 from Sup Tables 12/13, EVE, and ACMG inputs.
 
 Adds columns:
   - ACMG BS3/PS3 functional points computation
   - Number of assays
   - ACMG BS3/PS3 Final Functional Points
   - ACMG BS3/PS3 Capped Final Functional Points
-  - Alpha Missense Score
-  - Alpha missense classification
+  - EVE Score
+  - EVE classification
   - ACMG PP3/BP4 in silico predictor points
   - ACMG PM2 points
   - ACMG PP1/BS4 segregation points
@@ -23,7 +23,7 @@ import argparse
 import ast
 import re
 from pathlib import Path
-from typing import Dict, Iterable, List, Tuple
+from typing import Dict, Iterable, List
 
 import pandas as pd
 from openpyxl import Workbook, load_workbook
@@ -31,6 +31,10 @@ from openpyxl.styles import Alignment, Font
 
 
 FINAL_CODE_COL = "Final functional code label"
+EVE_SCORE_COL = "EVE Score"
+EVE_CLASS_COL = "EVE classification"
+EVE_SOURCE_COL = "EVE Source"
+INSILICO_POINTS_COL = "ACMG PP3/BP4 in silico predictor points"
 TABLE_TITLES = {
     "Sup Table 18": "Supplementary Table 18: Point system integration for BRCA1 variants",
     "Sup Table 19": "Supplementary Table 19: Point system integration for BRCA2 variants",
@@ -191,14 +195,67 @@ def classify_final_points(score: float) -> str:
     return ""
 
 
-def _load_alpha_missense(path: str, sheet: str) -> pd.DataFrame:
-    df = pd.read_excel(path, sheet_name=sheet, header=None)
-    df = df.rename(columns={0: "T2", 1: "T3", 2: "T4", 3: "Alpha Missense Score", 4: "Alpha missense classification"})
-    df = df.dropna(subset=["T2", "T3", "T4"])
-    df["T2"] = df["T2"].astype(str).str.strip()
-    df["T4"] = df["T4"].astype(str).str.strip()
-    df["T3"] = pd.to_numeric(df["T3"], errors="coerce")
-    return df[["T2", "T3", "T4", "Alpha Missense Score", "Alpha missense classification"]]
+def _eve_points(eve_class: object) -> int:
+    if pd.isna(eve_class):
+        return 0
+    eve_class_norm = str(eve_class).strip().lower()
+    if eve_class_norm == "benign":
+        return -1
+    if eve_class_norm == "pathogenic":
+        return 1
+    return 0
+
+
+def _parse_eve_variant_columns(df: pd.DataFrame) -> pd.DataFrame:
+    if {"T2", "T3", "T4"}.issubset(set(df.columns)):
+        return df
+    if {"wt_aa", "position", "mt_aa"}.issubset(set(df.columns)):
+        df = df.copy()
+        df["T2"] = df["wt_aa"]
+        df["T3"] = df["position"]
+        df["T4"] = df["mt_aa"]
+    return df
+
+
+def _load_eve_predictor(path: str, sheet: str) -> pd.DataFrame:
+    df = pd.read_excel(path, sheet_name=sheet)
+    df = _parse_eve_variant_columns(df)
+    col_t2 = _find_col(df, ["T2"])
+    col_t3 = _find_col(df, ["T3"])
+    col_t4 = _find_col(df, ["T4"])
+    col_score = _find_col(df, [EVE_SCORE_COL, "EVE_scores_ASM", "EVE score"])
+    col_class = _find_col(df, [EVE_CLASS_COL, "EVE_classes_75_pct_retained_ASM", "EVE Class (75% Set)"])
+
+    source_col = None
+    try:
+        source_col = _find_col(df, [EVE_SOURCE_COL])
+    except KeyError:
+        pass
+
+    keep_cols = [col_t2, col_t3, col_t4, col_score, col_class]
+    if source_col:
+        keep_cols.append(source_col)
+    out = df[keep_cols].copy()
+    rename_cols = {
+        col_t2: "T2",
+        col_t3: "T3",
+        col_t4: "T4",
+        col_score: EVE_SCORE_COL,
+        col_class: EVE_CLASS_COL,
+    }
+    if source_col:
+        rename_cols[source_col] = EVE_SOURCE_COL
+    out = out.rename(columns=rename_cols)
+    out = out.dropna(subset=["T2", "T3", "T4"])
+    out["T2"] = out["T2"].astype(str).str.strip()
+    out["T4"] = out["T4"].astype(str).str.strip()
+    out["T3"] = pd.to_numeric(out["T3"], errors="coerce")
+    out[EVE_SCORE_COL] = pd.to_numeric(out[EVE_SCORE_COL], errors="coerce")
+    out[EVE_CLASS_COL] = out[EVE_CLASS_COL].fillna("No score")
+    if EVE_SOURCE_COL not in out.columns:
+        out[EVE_SOURCE_COL] = Path(path).name
+    out[INSILICO_POINTS_COL] = out[EVE_CLASS_COL].apply(_eve_points)
+    return out[["T2", "T3", "T4", EVE_SCORE_COL, EVE_CLASS_COL, INSILICO_POINTS_COL, EVE_SOURCE_COL]]
 
 
 def _load_acmg_other_points(path: str, sheet: str) -> pd.DataFrame:
@@ -206,17 +263,15 @@ def _load_acmg_other_points(path: str, sheet: str) -> pd.DataFrame:
     col_t2 = _find_col(df, ["T2"])
     col_t3 = _find_col(df, ["T3"])
     col_t4 = _find_col(df, ["T4"])
-    col_pp3 = _find_col(df, ["ACMG PP3/BP4 in silico predictor points"])
     col_pm2 = _find_col(df, ["ACMG PM2 points"])
     col_pp1 = _find_col(df, ["ACMG PP1/BS4 segregation points"])
     col_ba1 = _find_col(df, ["ACMG BA1/BS1 allele freq points"])
-    out = df[[col_t2, col_t3, col_t4, col_pp3, col_pm2, col_pp1, col_ba1]].copy()
+    out = df[[col_t2, col_t3, col_t4, col_pm2, col_pp1, col_ba1]].copy()
     out = out.rename(
         columns={
             col_t2: "T2",
             col_t3: "T3",
             col_t4: "T4",
-            col_pp3: "ACMG PP3/BP4 in silico predictor points",
             col_pm2: "ACMG PM2 points",
             col_pp1: "ACMG PP1/BS4 segregation points",
             col_ba1: "ACMG BA1/BS1 allele freq points",
@@ -230,7 +285,7 @@ def _load_acmg_other_points(path: str, sheet: str) -> pd.DataFrame:
 
 def _attach_new_columns(
     base_df: pd.DataFrame,
-    alpha_df: pd.DataFrame,
+    predictor_df: pd.DataFrame,
     other_points_df: pd.DataFrame,
     gene_label: str,
 ) -> pd.DataFrame:
@@ -256,16 +311,16 @@ def _attach_new_columns(
 
     df = df.drop(columns=["Parsed_votes"])
 
-    # Merge AlphaMissense
+    # Merge EVE predictor calls.
     df["T2_key"] = df[col_t2].astype(str).str.strip()
     df["T4_key"] = df[col_t4].astype(str).str.strip()
     df["T3_key"] = pd.to_numeric(df[col_t3], errors="coerce")
     df = df.merge(
-        alpha_df,
+        predictor_df,
         how="left",
         left_on=["T2_key", "T3_key", "T4_key"],
         right_on=["T2", "T3", "T4"],
-        suffixes=("", "_alpha"),
+        suffixes=("", "_predictor"),
     )
 
     # Merge ACMG other points
@@ -277,7 +332,17 @@ def _attach_new_columns(
         suffixes=("", "_other"),
     )
 
-    drop_cols = ["T2_key", "T3_key", "T4_key", "T2_alpha", "T3_alpha", "T4_alpha", "T2_other", "T3_other", "T4_other"]
+    drop_cols = [
+        "T2_key",
+        "T3_key",
+        "T4_key",
+        "T2_predictor",
+        "T3_predictor",
+        "T4_predictor",
+        "T2_other",
+        "T3_other",
+        "T4_other",
+    ]
     for col in drop_cols:
         if col in df.columns:
             df = df.drop(columns=[col])
@@ -293,7 +358,7 @@ def _attach_new_columns(
 
     # Final ACMG points + classification
     points_cols = [
-        "ACMG PP3/BP4 in silico predictor points",
+        INSILICO_POINTS_COL,
         "ACMG PM2 points",
         "ACMG PP1/BS4 segregation points",
         "ACMG BA1/BS1 allele freq points",
@@ -301,6 +366,8 @@ def _attach_new_columns(
     ]
     for c in points_cols:
         df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0)
+    if EVE_CLASS_COL in df.columns:
+        df[EVE_CLASS_COL] = df[EVE_CLASS_COL].fillna("No score")
 
     df["FINAL ACMG POINTS"] = df[points_cols].sum(axis=1)
     df["FINAL ClinVar Classification"] = df["FINAL ACMG POINTS"].apply(classify_final_points)
@@ -323,9 +390,9 @@ def _attach_new_columns(
         "Number of assays",
         "ACMG BS3/PS3 Final Functional Points",
         "ACMG BS3/PS3 Capped Final Functional Points",
-        "Alpha Missense Score",
-        "Alpha missense classification",
-        "ACMG PP3/BP4 in silico predictor points",
+        EVE_SCORE_COL,
+        EVE_CLASS_COL,
+        INSILICO_POINTS_COL,
         "ACMG PM2 points",
         "ACMG PP1/BS4 segregation points",
         "ACMG BA1/BS1 allele freq points",
@@ -388,17 +455,17 @@ def _write_df(output_path: str, sheet_name: str, title: str, df: pd.DataFrame) -
 def write_sup_tables_18_19(
     sup12_df: pd.DataFrame,
     sup13_df: pd.DataFrame,
-    alpha_path: str,
+    predictor_path: str,
     other_points_path: str,
     output_path: str,
 ) -> None:
-    alpha_b1 = _load_alpha_missense(alpha_path, "BRCA1")
-    alpha_b2 = _load_alpha_missense(alpha_path, "BRCA2")
+    predictor_b1 = _load_eve_predictor(predictor_path, "BRCA1")
+    predictor_b2 = _load_eve_predictor(predictor_path, "BRCA2")
     other_b1 = _load_acmg_other_points(other_points_path, "BRCA1")
     other_b2 = _load_acmg_other_points(other_points_path, "BRCA2")
 
-    out18 = _attach_new_columns(sup12_df, alpha_b1, other_b1, "BRCA1")
-    out19 = _attach_new_columns(sup13_df, alpha_b2, other_b2, "BRCA2")
+    out18 = _attach_new_columns(sup12_df, predictor_b1, other_b1, "BRCA1")
+    out19 = _attach_new_columns(sup13_df, predictor_b2, other_b2, "BRCA2")
 
     _write_df(output_path, "Sup Table 18", TABLE_TITLES["Sup Table 18"], out18)
     _write_df(output_path, "Sup Table 19", TABLE_TITLES["Sup Table 19"], out19)
@@ -411,9 +478,11 @@ def main() -> None:
     ap.add_argument("--sup12", default="Sup Table 12")
     ap.add_argument("--sup13", default="Sup Table 13")
     ap.add_argument(
+        "--predictor",
         "--alpha",
-        default="dataset/AlphaMissense_Calculations_all.xlsx",
-        help="AlphaMissense workbook with BRCA1/BRCA2 tabs",
+        dest="predictor",
+        default="dataset/eve/EVE_BRCA12_scores.xlsx",
+        help="EVE workbook with BRCA1/BRCA2 tabs. --alpha is retained as a deprecated alias.",
     )
     ap.add_argument(
         "--other-points",
@@ -428,7 +497,7 @@ def main() -> None:
     sup12_df = pd.read_excel(args.workbook, sheet_name=sup12_sheet, header=1)
     sup13_df = pd.read_excel(args.workbook, sheet_name=sup13_sheet, header=1)
 
-    write_sup_tables_18_19(sup12_df, sup13_df, args.alpha, args.other_points, args.out)
+    write_sup_tables_18_19(sup12_df, sup13_df, args.predictor, args.other_points, args.out)
     print(f"[OK] Wrote Sup Table 18/19 to {args.out}")
 
 
