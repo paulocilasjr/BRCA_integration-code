@@ -9,4 +9,8 @@ __pycache__/
 sup7_sup8_new_cal.xlsx
 
 dataset/cpt1/
-dataset/eve/
+dataset/eve/*.zip
+dataset/eve/*.xlsx
+dataset/eve/*.csv
+dataset/eve/*.csv.gz
+dataset/eve/*.tmp
