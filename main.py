@@ -1,8 +1,17 @@
 import pandas as pd
 
-from sup_table_7 import summarize_tables, write_sup_table_7
-from sup_table_8 import summarize_tables as summarize_tables_8, write_sup_table_8
-from sup_table_9_10 import build_track_classification_map, write_sup_table_9_10
+from sup_table_7 import (
+    build_track_classification_map as build_brca1_track_classification_map,
+    summarize_tables,
+    write_detailed_sup_table_7,
+    write_sup_table_7,
+)
+from sup_table_8 import (
+    build_track_classification_map as build_brca2_track_classification_map,
+    summarize_tables as summarize_tables_8,
+    write_detailed_sup_table_8,
+    write_sup_table_8,
+)
 from supp_fig2 import generate_supp_fig2
 from sup_table_11 import write_sup_table_11
 from sup_table_12_13 import write_sup_table_12_13
@@ -97,13 +106,8 @@ if __name__ == "__main__":
     BRCA1_Reference_panel = tables["BRCA1_Reference_panel"]
     BRCA2_Reference_panel = tables["BRCA2_Reference_panel"]
 
-    write_sup_table_9_10(
-        BRCA1_table,
-        BRCA1_metadata,
-        BRCA2_table,
-        BRCA2_metadata,
-        OUTPUT_PATH,
-    )
+    write_detailed_sup_table_7(BRCA1_table, BRCA1_metadata, OUTPUT_PATH)
+    write_detailed_sup_table_8(BRCA2_table, BRCA2_metadata, OUTPUT_PATH)
     generate_supp_fig2(input_path=OUTPUT_PATH, output_prefix="figures/supp_fig2")
 
     summary_7 = summarize_tables(BRCA1_table, BRCA2_table, BRCA1_metadata, BRCA2_metadata)
@@ -120,8 +124,8 @@ if __name__ == "__main__":
         BRCA2_metadata,
     )
 
-    brca1_class_map = build_track_classification_map(BRCA1_table, BRCA1_metadata, 11009)
-    brca2_class_map = build_track_classification_map(BRCA2_table, BRCA2_metadata, 20169)
+    brca1_class_map = build_brca1_track_classification_map(BRCA1_table, BRCA1_metadata, 11009)
+    brca2_class_map = build_brca2_track_classification_map(BRCA2_table, BRCA2_metadata, 20169)
     sup12_df, sup13_df = write_sup_table_12_13(
         BRCA1_table,
         BRCA2_table,

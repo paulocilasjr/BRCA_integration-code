@@ -1,2 +1,12 @@
 results/
+figures/
+
 .DS_Store
+__pycache__/
+*.py[cod]
+
+~$*.xlsx
+sup7_sup8_new_cal.xlsx
+
+dataset/cpt1/
+dataset/eve/
