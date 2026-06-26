@@ -1,0 +1,29 @@
+The cross-validation approach was updated from random k-fold allocation to stratified k-fold cross-validation. Instead of assigning variants to folds purely at random, the folds are now split using the reference classification labels so that each fold preserves a similar proportion of pathogenic and benign variants. This reduces the chance that one fold is enriched for one class, which is especially important when sensitivity and specificity are being estimated from an imbalanced reference panel.
+
+In the current implementation, Sup Table 11 reports BRCA1 using K=10 folds and BRCA2 using K=5 folds. For each fold, the training set is used to credential assay-track evidence strengths, and the held-out test set is used to estimate performance.
+
+The table now includes fold-composition columns:
+
+train_pathogenic
+train_benign
+test_pathogenic
+test_benign
+It also reports no-call behavior per fold:
+
+No Call
+No Call Rate
+Total
+The performance columns remain:
+
+sensitivity
+sensitivity_lower_95CI
+sensitivity_upper_95CI
+specificity
+specificity_lower_95CI
+specificity_upper_95CI
+TP
+FP
+TN
+FN
+MCC
+So, compared with the random allocation version, the main change is methodological: folds are now class-balanced by pathogenic/benign reference status. The main table improvement is that Sup Table 11 now explicitly shows class composition and no-call rate for each fold, making it possible to verify that performance estimates are not driven by fold imbalance or variable no-call exclusions.
