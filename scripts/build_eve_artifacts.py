@@ -10,7 +10,7 @@ This script recreates the ignored large files used by the repository:
 
 Run from the repository root:
 
-  python3 dataset/eve/build_eve_artifacts.py
+  python3 scripts/build_eve_artifacts.py
 
 If your local Python TLS stack rejects the EVE certificate chain, rerun with
 --insecure-tls after confirming the HTTPS endpoints in the README.
@@ -35,8 +35,8 @@ except ImportError as exc:  # pragma: no cover - only used for user-facing setup
     ) from exc
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_EVE_DIR = Path(__file__).resolve().parent
+REPO_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_EVE_DIR = REPO_ROOT / "dataset" / "eve"
 DEFAULT_SOURCE_WORKBOOK = REPO_ROOT / "dataset" / "SUPP_TABLES_BRCA12_APR_2026.xlsx"
 DEFAULT_OUTPUT_WORKBOOK = DEFAULT_EVE_DIR / "EVE_BRCA12_scores.xlsx"
 

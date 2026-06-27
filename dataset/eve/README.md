@@ -34,14 +34,14 @@ because the analyzed BRCA1 variant tables cover the full coding sequence.
 From the repository root, run:
 
 ```sh
-python3 dataset/eve/build_eve_artifacts.py
+python3 scripts/build_eve_artifacts.py
 ```
 
 If the EVE HTTPS certificate chain is rejected by your local Python
 installation, rerun after confirming the URLs above:
 
 ```sh
-python3 dataset/eve/build_eve_artifacts.py --insecure-tls
+python3 scripts/build_eve_artifacts.py --insecure-tls
 ```
 
 The script creates:
@@ -64,7 +64,7 @@ If EVE republishes a file and you intentionally want to regenerate with the
 newer source, use:
 
 ```sh
-python3 dataset/eve/build_eve_artifacts.py --force-download --allow-checksum-mismatch
+python3 scripts/build_eve_artifacts.py --force-download --allow-checksum-mismatch
 ```
 
 ## Generate The Integrated Tables
@@ -75,13 +75,14 @@ After `dataset/eve/EVE_BRCA12_scores.xlsx` exists, run the repository pipeline:
 python3 main.py
 ```
 
-This writes the generated supplementary workbook to:
+This writes a timestamped generated supplementary workbook to:
 
 ```text
-results/code_generated.xlsx
+results/SUPP_TABLES_BRCA12_<timestamp>.xlsx
 ```
 
-Sup Tables 18 and 19 use the EVE workbook through `sup_table_18_19.py`.
+Sup Tables 18 and 19 use the EVE workbook through
+`brca_integration.tables.sup_table_18_19`.
 
 ## Expected EVE Coverage
 

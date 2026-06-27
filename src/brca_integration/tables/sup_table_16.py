@@ -33,7 +33,10 @@ from openpyxl.utils import get_column_letter
 # Feature lists
 # --------------------------------------------------------------------------------------
 try:
-    from BRCA1_BRCA2_domains import BRCA1_FEATURES as _BRCA1_FEATURES, BRCA2_FEATURES as _BRCA2_FEATURES
+    from brca_integration.reference.domains import (
+        BRCA1_FEATURES as _BRCA1_FEATURES,
+        BRCA2_FEATURES as _BRCA2_FEATURES,
+    )
 except Exception:  # pragma: no cover - fallback for standalone use
     _BRCA1_FEATURES = []
     _BRCA2_FEATURES = []

@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "brca-integration-code"
+version = "0.1.0"
+description = "Reproducible BRCA1/BRCA2 supplementary table generation pipeline"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "matplotlib",
+    "numpy",
+    "openpyxl",
+    "pandas",
+    "scikit-learn",
+    "scipy",
+    "upsetplot",
+]
+
+[project.scripts]
+brca-build-tables = "brca_integration.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+

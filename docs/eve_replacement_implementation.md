@@ -31,9 +31,9 @@ Repository files required:
 ```text
 dataset/SUPP_TABLES_BRCA12_APR_2026.xlsx
 dataset/ACMG_other_points.xlsx
-dataset/eve/build_eve_artifacts.py
+scripts/build_eve_artifacts.py
 dataset/eve/README.md
-sup_table_18_19.py
+brca_integration.tables.sup_table_18_19
 main.py
 ```
 
@@ -47,7 +47,7 @@ openpyxl
 Recreate the EVE artifacts from the repository root:
 
 ```sh
-python3 dataset/eve/build_eve_artifacts.py
+python3 scripts/build_eve_artifacts.py
 ```
 
 This command downloads the EVE per-protein variant archives, verifies the SHA256 hashes recorded below, and writes:
@@ -61,7 +61,7 @@ dataset/eve/EVE_BRCA12_scores.xlsx
 If local TLS certificate verification fails for the EVE site, confirm the HTTPS URLs below and rerun:
 
 ```sh
-python3 dataset/eve/build_eve_artifacts.py --insecure-tls
+python3 scripts/build_eve_artifacts.py --insecure-tls
 ```
 
 Then regenerate the integrated supplementary workbook:
@@ -73,7 +73,7 @@ python3 main.py
 The pipeline writes:
 
 ```text
-results/code_generated.xlsx
+results/SUPP_TABLES_BRCA12_<timestamp>.xlsx
 ```
 
 The generated `Sup Table 18` and `Sup Table 19` tabs are the EVE-recalculated integrated classification tables.
@@ -164,7 +164,7 @@ https://doi.org/10.1186/s13059-025-03575-w
 
 ## Local Files Created Or Recreated
 
-The following EVE files are created under `dataset/eve/` by `dataset/eve/build_eve_artifacts.py`. They are ignored by Git and are not exposed in the GitHub repository:
+The following EVE files are created under `dataset/eve/` by `scripts/build_eve_artifacts.py`. They are ignored by Git and are not exposed in the GitHub repository:
 
 | file | size in bytes | SHA256 |
 | --- | ---: | --- |
@@ -184,7 +184,7 @@ The downloaded zip archives contain:
 Preferred command:
 
 ```sh
-python3 dataset/eve/build_eve_artifacts.py
+python3 scripts/build_eve_artifacts.py
 ```
 
 Manual download commands, equivalent to the download step in the script:
@@ -257,7 +257,7 @@ EVE Source
 
 Generation steps:
 
-1. Run `dataset/eve/build_eve_artifacts.py` from the repository root.
+1. Run `scripts/build_eve_artifacts.py` from the repository root.
 2. The script downloads or reuses `BRCA1_HUMAN.EVE.variants.zip` and `BRCA2_HUMAN.EVE.variants.zip`.
 3. The script verifies the downloaded archive SHA256 hashes by default.
 4. The script reads `dataset/SUPP_TABLES_BRCA12_APR_2026.xlsx`.
@@ -273,7 +273,7 @@ Generation steps:
 The implementation of these steps is in:
 
 ```text
-dataset/eve/build_eve_artifacts.py
+scripts/build_eve_artifacts.py
 ```
 
 ## Coverage
@@ -328,11 +328,11 @@ The code uses EVE's author-provided `EVE_classes_75_pct_retained_ASM` classes:
 | `Uncertain` | 0 |
 | missing score/class | 0 |
 
-This is implemented in `sup_table_18_19.py` by `_eve_points`.
+This is implemented in `brca_integration.tables.sup_table_18_19` by `_eve_points`.
 
 ## Code Changes
 
-### sup_table_18_19.py
+### brca_integration.tables.sup_table_18_19
 
 Changes:
 
@@ -367,7 +367,7 @@ python3 main.py
 Output workbook:
 
 ```text
-results/code_generated.xlsx
+results/SUPP_TABLES_BRCA12_<timestamp>.xlsx
 ```
 
 The generated `Sup Table 18` and `Sup Table 19` no longer contain:
@@ -425,13 +425,13 @@ Final classification transitions caused by the EVE substitution:
 Syntax check:
 
 ```sh
-python3 -m py_compile dataset/eve/build_eve_artifacts.py sup_table_18_19.py main.py
+python3 -m py_compile scripts/build_eve_artifacts.py brca_integration.tables.sup_table_18_19 main.py
 ```
 
 EVE artifact generation check using cached downloads:
 
 ```sh
-python3 dataset/eve/build_eve_artifacts.py \
+python3 scripts/build_eve_artifacts.py \
   --skip-download \
   --output-workbook /private/tmp/EVE_BRCA12_scores_test.xlsx
 ```
@@ -439,7 +439,7 @@ python3 dataset/eve/build_eve_artifacts.py \
 Isolated Sup Table 18/19 writer check:
 
 ```sh
-python3 sup_table_18_19.py dataset/SUPP_TABLES_BRCA12_APR_2026.xlsx \
+python3 brca_integration.tables.sup_table_18_19 dataset/SUPP_TABLES_BRCA12_APR_2026.xlsx \
   -o /private/tmp/sup18_19_eve_test.xlsx \
   --predictor /private/tmp/EVE_BRCA12_scores_test.xlsx \
   --other-points dataset/ACMG_other_points.xlsx
