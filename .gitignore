@@ -4,6 +4,13 @@
 .DS_Store
 __pycache__/
 *.py[cod]
+.venv/
+.pytest_cache/
+*.egg-info/
+/build/
+/dist/
+.coverage
+htmlcov/
 
 ~$*.xlsx
 /sup7_sup8_new_cal.xlsx

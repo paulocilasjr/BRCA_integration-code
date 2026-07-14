@@ -1,8 +1,7 @@
-matplotlib
-numpy
-openpyxl
-pandas
-scikit-learn
-scipy
-upsetplot
-
+matplotlib==3.11.0
+numpy==2.5.1
+openpyxl==3.1.5
+pandas==3.0.3
+scikit-learn==1.9.0
+scipy==1.18.0
+upsetplot==0.9.0

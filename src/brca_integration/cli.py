@@ -9,6 +9,7 @@ from .config import (
     DEFAULT_OTHER_POINTS_WORKBOOK,
     DEFAULT_RESULTS_DIR,
 )
+from .validation import ValidationError
 
 
 def parse_args() -> argparse.Namespace:
@@ -57,15 +58,18 @@ def main() -> None:
     args = parse_args()
     from .pipeline import build_supplementary_workbook
 
-    outputs = build_supplementary_workbook(
-        input_workbook=Path(args.input_workbook),
-        output_workbook=Path(args.output_workbook) if args.output_workbook else None,
-        output_dir=Path(args.output_dir),
-        timestamp=args.timestamp,
-        eve_workbook=Path(args.eve_workbook),
-        other_points_workbook=Path(args.other_points_workbook),
-        figure_prefix=Path(args.figure_prefix) if args.figure_prefix else None,
-    )
+    try:
+        outputs = build_supplementary_workbook(
+            input_workbook=Path(args.input_workbook),
+            output_workbook=Path(args.output_workbook) if args.output_workbook else None,
+            output_dir=Path(args.output_dir),
+            timestamp=args.timestamp,
+            eve_workbook=Path(args.eve_workbook),
+            other_points_workbook=Path(args.other_points_workbook),
+            figure_prefix=Path(args.figure_prefix) if args.figure_prefix else None,
+        )
+    except ValidationError as exc:
+        raise SystemExit(f"Input/output validation failed: {exc}") from exc
 
     print(f"Wrote supplementary workbook: {outputs.workbook}")
     print(f"Wrote Supp Fig 2 files with prefix: {outputs.figure_prefix}")

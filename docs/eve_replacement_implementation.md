@@ -172,6 +172,12 @@ The following EVE files are created under `dataset/eve/` by `scripts/build_eve_a
 | `dataset/eve/BRCA2_HUMAN.EVE.variants.zip` | 16,023,212 | `ba15c69673dab8bb6ce73f18407e10bf4106eebdafdf84caaea9db39a01038d8` |
 | `dataset/eve/EVE_BRCA12_scores.xlsx` | 1,804,353 | `c5e9b06fe5d03e5e6cb4603ee83f640f0f5e45d840910f773d0afcf224c0fb59` |
 
+The normalized workbook checksum above records the historical analysis
+artifact. Rebuilding the same cell content with a different spreadsheet-library
+version can change ZIP metadata and therefore the file checksum; the two source
+archive checksums and the content-level coverage/count checks are the invariant
+reproduction criteria.
+
 The downloaded zip archives contain:
 
 | archive | member | uncompressed bytes |
@@ -394,16 +400,16 @@ Before and after final classification counts:
 | tab | source | B | LB | VUS | LP | P |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
 | `Sup Table 18` | previous AlphaMissense integration | 83 | 2,211 | 626 | 318 | 9 |
-| `Sup Table 18` | new EVE integration | 83 | 2,207 | 583 | 364 | 10 |
+| `Sup Table 18` | new EVE integration | 83 | 2,205 | 585 | 364 | 10 |
 | `Sup Table 19` | previous AlphaMissense integration | 107 | 4,595 | 1,119 | 351 | 5 |
-| `Sup Table 19` | new EVE integration | 104 | 3,877 | 1,860 | 331 | 5 |
+| `Sup Table 19` | new EVE integration | 104 | 3,881 | 1,873 | 314 | 5 |
 
 Row-level comparison against the previous April workbook:
 
 | tab | row set changed? | PP3/BP4 point changes | final point changes | final classification changes |
 | --- | --- | ---: | ---: | ---: |
-| `Sup Table 18` | no | 1,872 | 1,872 | 70 |
-| `Sup Table 19` | no | 3,856 | 3,856 | 874 |
+| `Sup Table 18` | no | 1,872 | 1,880 | 72 |
+| `Sup Table 19` | no | 3,856 | 3,937 | 881 |
 
 Final classification transitions caused by the EVE substitution:
 
@@ -411,13 +417,13 @@ Final classification transitions caused by the EVE substitution:
 | --- | --- | ---: |
 | `Sup Table 18` | VUS -> LP | 55 |
 | `Sup Table 18` | LP -> VUS | 8 |
-| `Sup Table 18` | LB -> VUS | 5 |
+| `Sup Table 18` | LB -> VUS | 7 |
 | `Sup Table 18` | VUS -> LB | 1 |
 | `Sup Table 18` | LP -> P | 1 |
-| `Sup Table 19` | LB -> VUS | 727 |
-| `Sup Table 19` | LP -> VUS | 79 |
-| `Sup Table 19` | VUS -> LP | 59 |
-| `Sup Table 19` | VUS -> LB | 6 |
+| `Sup Table 19` | LB -> VUS | 731 |
+| `Sup Table 19` | LP -> VUS | 85 |
+| `Sup Table 19` | VUS -> LP | 48 |
+| `Sup Table 19` | VUS -> LB | 14 |
 | `Sup Table 19` | B -> LB | 3 |
 
 ## Verification Commands
@@ -425,7 +431,7 @@ Final classification transitions caused by the EVE substitution:
 Syntax check:
 
 ```sh
-python3 -m py_compile scripts/build_eve_artifacts.py brca_integration.tables.sup_table_18_19 main.py
+python3 -m py_compile scripts/build_eve_artifacts.py src/brca_integration/tables/sup_table_18_19.py main.py
 ```
 
 EVE artifact generation check using cached downloads:
@@ -439,7 +445,7 @@ python3 scripts/build_eve_artifacts.py \
 Isolated Sup Table 18/19 writer check:
 
 ```sh
-python3 brca_integration.tables.sup_table_18_19 dataset/SUPP_TABLES_BRCA12_APR_2026.xlsx \
+PYTHONPATH=src python3 -m brca_integration.tables.sup_table_18_19 dataset/SUPP_TABLES_BRCA12_APR_2026.xlsx \
   -o /private/tmp/sup18_19_eve_test.xlsx \
   --predictor /private/tmp/EVE_BRCA12_scores_test.xlsx \
   --other-points dataset/ACMG_other_points.xlsx

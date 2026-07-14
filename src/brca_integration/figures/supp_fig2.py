@@ -12,7 +12,13 @@ import argparse
 import re
 from pathlib import Path
 
+import matplotlib
 import pandas as pd
+
+# The publication pipeline is normally executed non-interactively (CI, Docker,
+# or a remote compute node).  Force a raster backend before importing pyplot so
+# figure generation never tries to open a platform GUI.
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 

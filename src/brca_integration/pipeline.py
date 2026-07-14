@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import shutil
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Dict
+from uuid import uuid4
 
 import pandas as pd
 
@@ -40,6 +43,7 @@ from .tables.sup_table_16 import (
 )
 from .tables.sup_table_17 import write_sup_table_17
 from .tables.sup_table_18_19 import write_sup_tables_18_19
+from .validation import validate_generated_workbook, validate_inputs
 
 SHEETS = {
     "Sup Table 1": "BRCA1_table",
@@ -97,8 +101,66 @@ def build_supplementary_workbook(
         else DEFAULT_FIGURES_DIR / output_workbook.stem / "supp_fig2"
     )
 
+    input_paths = (input_workbook, eve_workbook, other_points_workbook)
+    resolved_output = output_workbook.resolve()
+    if any(resolved_output == path.resolve() for path in input_paths):
+        raise ValueError("The output workbook must not overwrite an input workbook.")
+
+    validate_inputs(input_workbook, eve_workbook, other_points_workbook)
+
     output_workbook.parent.mkdir(parents=True, exist_ok=True)
     figure_prefix.parent.mkdir(parents=True, exist_ok=True)
+
+    temporary_workbook = output_workbook.parent / (
+        f".{output_workbook.stem}.{uuid4().hex}.tmp.xlsx"
+    )
+    temporary_figure_dir = Path(
+        tempfile.mkdtemp(prefix=".brca-figures-", dir=figure_prefix.parent)
+    )
+    temporary_figure_prefix = temporary_figure_dir / figure_prefix.name
+
+    try:
+        outputs = _build_supplementary_workbook(
+            input_workbook=input_workbook,
+            output_workbook=temporary_workbook,
+            eve_workbook=eve_workbook,
+            other_points_workbook=other_points_workbook,
+            figure_prefix=temporary_figure_prefix,
+        )
+        enforce_publication_rows = (
+            input_workbook.resolve() == DEFAULT_INPUT_WORKBOOK.resolve()
+        )
+        validate_generated_workbook(
+            outputs.workbook, enforce_publication_rows=enforce_publication_rows
+        )
+
+        figure_paths = [
+            temporary_figure_prefix.with_suffix(suffix)
+            for suffix in (".png", ".pdf", ".svg")
+        ]
+        missing_figures = [str(path) for path in figure_paths if not path.is_file()]
+        if missing_figures:
+            raise RuntimeError(f"Figure generation did not create: {missing_figures}")
+
+        temporary_workbook.replace(output_workbook)
+        for source in figure_paths:
+            suffix = source.suffix
+            source.replace(figure_prefix.with_suffix(suffix))
+    finally:
+        temporary_workbook.unlink(missing_ok=True)
+        shutil.rmtree(temporary_figure_dir, ignore_errors=True)
+
+    return PipelineOutputs(workbook=output_workbook, figure_prefix=figure_prefix)
+
+
+def _build_supplementary_workbook(
+    input_workbook: Path,
+    output_workbook: Path,
+    eve_workbook: Path,
+    other_points_workbook: Path,
+    figure_prefix: Path,
+) -> PipelineOutputs:
+    """Build into temporary paths; the public wrapper validates and publishes them."""
 
     tables = load_tables(input_workbook)
     brca1_table = tables["BRCA1_table"]
