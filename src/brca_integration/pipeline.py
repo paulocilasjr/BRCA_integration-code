@@ -18,6 +18,7 @@ from .config import (
     DEFAULT_RESULTS_DIR,
 )
 from .figures.supp_fig2 import generate_supp_fig2
+from .figures.supp_fig3 import generate as generate_supp_fig3
 from .tables.sup_table_7 import (
     build_track_classification_map as build_brca1_track_classification_map,
     summarize_tables,
@@ -134,23 +135,45 @@ def build_supplementary_workbook(
             outputs.workbook, enforce_publication_rows=enforce_publication_rows
         )
 
+        prefix_pairs = [
+            (temporary_figure_prefix, figure_prefix),
+            (supp_fig3_prefix(temporary_figure_prefix), supp_fig3_prefix(figure_prefix)),
+        ]
         figure_paths = [
-            temporary_figure_prefix.with_suffix(suffix)
+            (temporary.with_suffix(suffix), final.with_suffix(suffix))
+            for temporary, final in prefix_pairs
             for suffix in (".png", ".pdf", ".svg")
         ]
-        missing_figures = [str(path) for path in figure_paths if not path.is_file()]
+        # Supp Fig 3 also emits the underlying set membership table.
+        temporary_fig3, final_fig3 = prefix_pairs[1]
+        figure_paths.append(
+            (
+                temporary_fig3.with_name(f"{temporary_fig3.name}_sets.tsv"),
+                final_fig3.with_name(f"{final_fig3.name}_sets.tsv"),
+            )
+        )
+        missing_figures = [
+            str(source) for source, _ in figure_paths if not source.is_file()
+        ]
         if missing_figures:
             raise RuntimeError(f"Figure generation did not create: {missing_figures}")
 
         temporary_workbook.replace(output_workbook)
-        for source in figure_paths:
-            suffix = source.suffix
-            source.replace(figure_prefix.with_suffix(suffix))
+        for source, destination in figure_paths:
+            source.replace(destination)
     finally:
         temporary_workbook.unlink(missing_ok=True)
         shutil.rmtree(temporary_figure_dir, ignore_errors=True)
 
     return PipelineOutputs(workbook=output_workbook, figure_prefix=figure_prefix)
+
+
+def supp_fig3_prefix(figure_prefix: Path) -> Path:
+    """Derive the Supp Fig 3 output prefix from the Supp Fig 2 prefix."""
+    name = figure_prefix.name
+    if "fig2" in name:
+        return figure_prefix.with_name(name.replace("fig2", "fig3"))
+    return figure_prefix.with_name(f"{name}_fig3")
 
 
 def _build_supplementary_workbook(
@@ -217,6 +240,9 @@ def _build_supplementary_workbook(
         sup13_df,
         str(output_workbook),
     )
+
+    # Supp Fig 3 reads the Supp Table 14/15 enrichment-ratio panels just written.
+    generate_supp_fig3(output_workbook, supp_fig3_prefix(figure_prefix))
 
     brca1_features = load_features(None, BRCA1_FEATURES, "BRCA1")
     brca2_features = load_features(None, BRCA2_FEATURES, "BRCA2")

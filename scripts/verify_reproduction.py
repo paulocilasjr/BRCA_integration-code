@@ -56,7 +56,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--figure-prefix",
         type=Path,
-        help="Optional Supp Fig 2 prefix; checks .png, .pdf, and .svg files.",
+        help=(
+            "Optional Supp Fig 2 prefix; checks .png, .pdf, and .svg files for "
+            "Supp Fig 2 and the derived Supp Fig 3 prefix."
+        ),
     )
     parser.add_argument(
         "--skip-input-checksums",
@@ -125,7 +128,10 @@ def main() -> None:
     print(f"[OK] Workbook structure and error scan: {args.workbook}")
     verify_metrics(args.workbook)
     if args.figure_prefix:
+        from brca_integration.pipeline import supp_fig3_prefix
+
         verify_figures(args.figure_prefix)
+        verify_figures(supp_fig3_prefix(args.figure_prefix))
     print("[OK] Reproduction verification passed")
 
 

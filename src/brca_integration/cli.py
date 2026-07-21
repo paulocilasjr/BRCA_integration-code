@@ -49,7 +49,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--figure-prefix",
         default=None,
-        help="Prefix for generated Supp Fig 2 files. Defaults to figures/<workbook_stem>/supp_fig2.",
+        help=(
+            "Prefix for generated Supp Fig 2 files. Defaults to "
+            "figures/<workbook_stem>/supp_fig2. The Supp Fig 3 prefix is derived "
+            "from it (fig2 -> fig3)."
+        ),
     )
     return parser.parse_args()
 
@@ -72,7 +76,10 @@ def main() -> None:
         raise SystemExit(f"Input/output validation failed: {exc}") from exc
 
     print(f"Wrote supplementary workbook: {outputs.workbook}")
+    from .pipeline import supp_fig3_prefix
+
     print(f"Wrote Supp Fig 2 files with prefix: {outputs.figure_prefix}")
+    print(f"Wrote Supp Fig 3 files with prefix: {supp_fig3_prefix(outputs.figure_prefix)}")
 
 
 if __name__ == "__main__":

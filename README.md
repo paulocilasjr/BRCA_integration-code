@@ -13,6 +13,8 @@ The primary reproducible products are:
 
 - Supplementary Tables 7–19 in a single `.xlsx` workbook (13 worksheets).
 - Supplementary Figure 2 as PNG, PDF, and SVG.
+- Supplementary Figure 3 (UpSet diagram of enriched/depleted substitution
+  overlaps) as PNG, PDF, and SVG.
 
 ## Reproduce the results
 
@@ -88,7 +90,8 @@ src/brca_integration/
   pipeline.py                 Atomic end-to-end pipeline
   validation.py               Input/output integrity checks
   tables/                     Supplementary table calculations and writers
-  figures/                    Supplementary Figure 2 generation
+  figures/supp_fig2.py        Supplementary Figure 2 generation
+  figures/supp_fig3.py        Supplementary Figure 3 (UpSet) generation
   reference/                  Curated BRCA1/BRCA2 domain constants
 tests/                        Fast regression tests
 checksums.sha256              SHA-256 manifest for deposited workbooks
